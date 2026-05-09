@@ -147,12 +147,12 @@
                 <div class="upload-grid" style="grid-template-columns: 1fr;">
                     <div class="upload-box">
                         <h3>Upload Amazon Return Report (.tsv / .txt)</h3>
-                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">New reports will automatically merge into your All-Time Cloud Database.</p>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">New reports will automatically append to your All-Time Cloud Database without deleting old records.</p>
                         <input type="file" id="amazonReport" accept=".tsv,.txt" onchange="processAmazonReport()">
                     </div>
                 </div>
                 
-                <h3 style="margin-top: 20px;">All-Time Data Preview</h3>
+                <h3 style="margin-top: 20px;">All-Time Cloud Data</h3>
                 <div style="max-height: 400px; overflow-y: auto;">
                     <table id="ingestionTable">
                         <thead>
@@ -868,23 +868,28 @@
                 });
 
                 try {
-                    // 1. Push strictly the new records to Firebase immediately
-                    const batch = db.batch();
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-
-                    newRecords.forEach(item => {
-                        const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
-                        const docRef = collectionRef.doc(docId);
-                        
-                        // Merge: true is the magic! It adds the new item without overwriting existing data (like warehouse scan conditions)
-                        batch.set(docRef, item, { merge: true }); 
-                    });
-
-                    await batch.commit();
                     
-                    // 2. Now pull the complete, updated all-time list from Firebase back to the screen
+                    // Firebase limits batch writes to 500. We chunk it into 400 to be safe.
+                    const chunkSize = 400; 
+                    for (let i = 0; i < newRecords.length; i += chunkSize) {
+                        const chunk = newRecords.slice(i, i + chunkSize);
+                        const batch = db.batch();
+
+                        chunk.forEach(item => {
+                            const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
+                            const docRef = collectionRef.doc(docId);
+                            
+                            // merge: true is the magic! It adds the new item without overwriting existing warehouse scans
+                            batch.set(docRef, item, { merge: true }); 
+                        });
+
+                        await batch.commit();
+                    }
+                    
+                    // Fetch the newly merged complete list from the cloud
                     await loadData();
-                    alert(`Successfully backed up ${newRecords.length} records to your All-Time Cloud Master File!`);
+                    alert(`Success! Safely backed up ${newRecords.length} records into your All-Time Cloud Master File!`);
                     document.getElementById('amazonReport').value = ''; 
                     
                 } catch (err) {
