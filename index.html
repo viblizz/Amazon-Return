@@ -147,8 +147,13 @@
                 <div class="upload-grid" style="grid-template-columns: 1fr;">
                     <div class="upload-box">
                         <h3>Upload Amazon Return Report (.tsv / .txt)</h3>
-                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">New reports will automatically append to your All-Time Cloud Database without deleting old records.</p>
-                        <input type="file" id="amazonReport" accept=".tsv,.txt" onchange="processAmazonReport()">
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Select your file, then click Upload to merge it safely into your All-Time Cloud Database.</p>
+                        
+                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center; margin-top: 15px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f8f9fa;">
+                            <input type="file" id="amazonReport" accept=".tsv,.txt" style="max-width: 250px;">
+                            <button class="action-btn" onclick="processAmazonReport()" style="background:#0F5132;">📤 Upload Data</button>
+                        </div>
+
                     </div>
                 </div>
                 
@@ -834,40 +839,52 @@
         }
 
         // ==============================================
-        // 1. DATA INGESTION (UPDATED FOR ALL-TIME MERGING)
+        // 1. DATA INGESTION (UPDATED WITH EXPLICIT UPLOAD + SANITIZATION)
         // ==============================================
         function processAmazonReport() {
-            const file = document.getElementById('amazonReport').files[0];
-            if(!file) return;
+            const fileInput = document.getElementById('amazonReport');
+            const file = fileInput.files[0];
+            
+            if(!file) {
+                return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
+            }
 
             setCloudStatus('syncing');
 
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const rows = e.target.result.split('\n');
-                const h = rows[0].split('\t');
-                
-                const map = { 
-                    oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
-                    tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
-                    reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
-                };
-                
-                const newRecords = rows.slice(1).filter(r => r.trim()).map((r, idx) => {
-                    const c = r.split('\t');
-                    let amt = c[map.oAmt] ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
-                    let tid = c[map.tid] ? c[map.tid] : `NO-TRK-${idx}`; 
-
-                    return { 
-                        orderId: c[map.oid], reqDate: c[map.reqDate], trackingId: tid, 
-                        sku: c[map.sku], asin: c[map.asin], amzReason: c[map.reason], 
-                        oAmt: amt, oQty: c[map.oQty] || "1", 
-                        status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
-                        claimId: '', claimDate: '', amtRec: ''
-                    };
-                });
-
                 try {
+                    const rows = e.target.result.split('\n');
+                    if(rows.length < 2) throw new Error("File appears to be empty or invalid.");
+                    
+                    const h = rows[0].split('\t');
+                    
+                    const map = { 
+                        oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
+                        tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
+                        reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
+                    };
+                    
+                    const newRecords = rows.slice(1).filter(r => r.trim()).map((r, idx) => {
+                        const c = r.split('\t');
+                        let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
+                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid] : `NO-TRK-${Date.now()}-${idx}`; 
+
+                        // Strict formatting to prevent undefined errors in Firebase
+                        return { 
+                            orderId: (map.oid !== -1 && c[map.oid]) ? c[map.oid] : `UNKNOWN-OID-${idx}`, 
+                            reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "", 
+                            trackingId: tid, 
+                            sku: (map.sku !== -1 && c[map.sku]) ? c[map.sku] : "", 
+                            asin: (map.asin !== -1 && c[map.asin]) ? c[map.asin] : "", 
+                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "", 
+                            oAmt: amt, 
+                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1", 
+                            status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
+                            claimId: '', claimDate: '', amtRec: ''
+                        };
+                    });
+
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
                     
                     // Firebase limits batch writes to 500. We chunk it into 400 to be safe.
@@ -890,14 +907,20 @@
                     // Fetch the newly merged complete list from the cloud
                     await loadData();
                     alert(`Success! Safely backed up ${newRecords.length} records into your All-Time Cloud Master File!`);
-                    document.getElementById('amazonReport').value = ''; 
+                    fileInput.value = ''; 
                     
                 } catch (err) {
                     console.error("Upload error:", err);
-                    alert("Cloud upload failed. Check your internet connection.");
+                    alert("Cloud upload failed. Please check the file format and your internet connection.");
                     setCloudStatus('offline');
                 }
             };
+            
+            reader.onerror = () => {
+                alert("Error reading file from your computer.");
+                setCloudStatus('offline');
+            };
+            
             reader.readAsText(file);
         }
 
