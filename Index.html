@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Amazon Return Management System</title>
     
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }
         body { background-color: #f8f9fa; color: #202124; min-height: 100vh; }
@@ -419,6 +422,24 @@
     </div>
 
     <script>
+        // ==============================================
+        // FIREBASE INITIALIZATION
+        // ==============================================
+        const firebaseConfig = {
+          apiKey: "AIzaSyBObk3RqCk94jGjobyw5lE_GXLbgN0kgMg",
+          authDomain: "return-tracking-d4e83.firebaseapp.com",
+          projectId: "return-tracking-d4e83",
+          storageBucket: "return-tracking-d4e83.firebasestorage.app",
+          messagingSenderId: "892529435384",
+          appId: "1:892529435384:web:f21e2496d20b868d1f910d"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // ==============================================
+        // APPLICATION LOGIC
+        // ==============================================
         const DEFAULT_CO = [
             { name: "Miss World", color: "#E91E63" },
             { name: "Indiglob", color: "#0F5132" },
@@ -430,7 +451,7 @@
         let scanTimer;
         let editingSafetyRows = []; 
         let orderIdCounts = {}; 
-        let currentCompany = ""; // Tracks the active workspace
+        let currentCompany = ""; 
 
         function init() {
             const grid = document.getElementById('profileGrid');
@@ -443,7 +464,7 @@
                     document.getElementById('accountScreen').style.display = 'none';
                     document.getElementById('dashboardScreen').style.display = 'grid';
                     document.getElementById('currentWorkspaceTitle').innerText = currentCompany;
-                    loadData(); // Load data specifically for this company
+                    loadData(); // Load data from Firebase
                 };
                 card.innerHTML = `<div class="delete-btn" onclick="event.stopPropagation(); companies.splice(${i},1); save(); init();">×</div>
                                   <div class="avatar" style="background:${co.color}">${co.name[0]}</div><h3>${co.name}</h3>`;
@@ -453,32 +474,58 @@
             const scanInput = document.getElementById('scanInput');
             if (scanInput) scanInput.addEventListener('input', handleAutoScan);
         }
+
         function addNewCompany() { const n = prompt("Company Name:"); if(n) { companies.push({name:n, color:'#'+Math.floor(Math.random()*16777215).toString(16)}); save(); init(); } }
         function save() { localStorage.setItem('userCos', JSON.stringify(companies)); }
 
         // ==============================================
-        // DATA PERSISTENCE & BACKUP LOGIC
+        // DATA PERSISTENCE (FIREBASE CLOUD STORAGE)
         // ==============================================
-        function loadData() {
-            reportData = JSON.parse(localStorage.getItem('amazonReportData_' + currentCompany)) || [];
-            if (reportData.length > 0) {
-                document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
-                    <tr><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
-                    <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
-                    <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
-                `).join('');
-            } else {
-                document.getElementById('ingestionTableBody').innerHTML = '';
+        async function loadData() {
+            reportData = [];
+            document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading data from cloud...</td></tr>';
+            
+            try {
+                const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
+                
+                snapshot.forEach(doc => {
+                    reportData.push(doc.data());
+                });
+
+                if (reportData.length > 0) {
+                    document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
+                        <tr><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
+                        <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
+                        <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
+                    `).join('');
+                } else {
+                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">No data found. Upload a report.</td></tr>';
+                }
+                updateStats();
+            } catch (error) {
+                console.error("Error loading data:", error);
+                alert("Failed to load data from Firebase. Check your connection.");
             }
-            updateStats();
         }
 
-        function saveData() {
+        async function saveData() {
             if (currentCompany) {
                 try {
-                    localStorage.setItem('amazonReportData_' + currentCompany, JSON.stringify(reportData));
+                    const batch = db.batch();
+                    const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
+
+                    reportData.forEach(item => {
+                        // Handle missing tracking IDs gracefully to prevent overwriting
+                        const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
+                        const docRef = collectionRef.doc(docId);
+                        batch.set(docRef, item, { merge: true }); 
+                    });
+
+                    await batch.commit();
+                    console.log("Master file synced to cloud.");
                 } catch (e) {
-                    alert("⚠️ Browser storage limit reached! Please export your data to Excel and click 'Clear Saved Data' to free up space.");
+                    console.error("Error saving to Firebase:", e);
+                    alert("Error syncing to the cloud.");
                 }
             }
         }
@@ -501,10 +548,9 @@
                     const data = JSON.parse(e.target.result);
                     if (Array.isArray(data)) {
                         reportData = data;
-                        saveData();
+                        saveData(); // Save restored data to Firebase
                         loadData();
                         alert("Backup restored successfully! Loaded " + data.length + " records.");
-                        // Refresh active tab views
                         if(document.getElementById('master').classList.contains('active')) renderMasterTable();
                         if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
                     } else {
@@ -513,20 +559,33 @@
                 } catch(err) {
                     alert("Error reading backup file.");
                 }
-                event.target.value = ''; // Reset file input
+                event.target.value = ''; 
             };
             reader.readAsText(file);
         }
 
-        function clearCompanyData() {
-            if(confirm("Are you sure you want to clear all saved data for " + currentCompany + "?\n\n(Don't worry, an automatic backup will download to your computer just in case.)")) {
+        async function clearCompanyData() {
+            if(confirm("Are you sure you want to clear all saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
                 if (reportData.length > 0) {
-                    exportBackup(); // Auto-download safety net
+                    exportBackup(); 
                 }
-                reportData = [];
-                saveData();
-                loadData();
-                alert("Data cleared.");
+                
+                try {
+                    // Delete all documents in the Firestore collection
+                    const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
+                    const batch = db.batch();
+                    snapshot.docs.forEach((doc) => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
+                    
+                    reportData = [];
+                    loadData();
+                    alert("Cloud data cleared.");
+                } catch(e) {
+                    console.error("Error clearing data:", e);
+                    alert("Error clearing data from Firebase.");
+                }
             }
         }
 
@@ -762,7 +821,7 @@
                     <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
                 `).join('');
                 
-                saveData(); // Save locally
+                saveData(); // Save to Firebase
                 updateStats();
                 alert(`Loaded ${reportData.length} records.`);
             };
@@ -805,7 +864,7 @@
             if(expectedDeliveries.length === 0) {
                 alert("No IDs matched the report, or matched IDs had blank Tracking Numbers.");
             } else {
-                saveData(); // Save locally
+                saveData(); // Save to Firebase
                 renderScanTable();
                 updateStats();
                 alert(`Matched ${expectedDeliveries.length} expected deliveries.`);
@@ -895,7 +954,7 @@
                 item.claimStatus = 'Pending Claim';
             }
             
-            saveData(); // Save locally
+            saveData(); // Save to Firebase
             document.getElementById(`row-${tid}`).style.display = 'none';
             unlockScanner();
             updateStats();
@@ -917,7 +976,6 @@
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // Hide anything where Delivery Date is more than 7 days ago
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
                 if (d.delDate) {
@@ -1105,7 +1163,7 @@
 
             item.claimId = cid; item.claimDate = cdate; item.amtRec = amt; item.recQty = cqty; item.claimStatus = cstatus;
 
-            saveData(); // Save locally
+            saveData(); // Save to Firebase
             editingSafetyRows = editingSafetyRows.filter(id => id !== oid);
             renderSafetyTable(); 
             updateStats();
@@ -1236,7 +1294,7 @@
                 item.amtRec = document.getElementById(`em-amt-${tid}`).value; item.claimDate = document.getElementById(`em-cdate-${tid}`).value;
             });
             
-            saveData(); // Save locally
+            saveData(); // Save to Firebase
             updateStats(); 
             document.getElementById(`master-row-${oid}`).outerHTML = getMasterRowHTML(items, false);
             filterMaster();
@@ -1434,7 +1492,7 @@
                     }
                 }
                 
-                saveData(); // Save locally
+                saveData(); // Save to Firebase
                 updateStats();
                 renderMasterTable();
                 if(document.getElementById('safety').classList.contains('active')) {
