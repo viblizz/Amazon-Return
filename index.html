@@ -477,7 +477,7 @@
                 statusEl.style.color = '#0f5132';
                 statusEl.style.borderColor = '#c3e6cb';
             } else if (state === 'offline') {
-                statusEl.innerHTML = '🔴 Offline (Check Wi-Fi)';
+                statusEl.innerHTML = '🔴 Offline (Check Wi-Fi / Permissions)';
                 statusEl.style.background = '#fce8e6';
                 statusEl.style.color = '#d93025';
                 statusEl.style.borderColor = '#fad2cf';
@@ -538,7 +538,6 @@
                 });
 
                 if (reportData.length > 0) {
-                    // Sort to show newest requests first
                     reportData.sort((a,b) => new Date(b.reqDate) - new Date(a.reqDate));
                     
                     document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
@@ -555,7 +554,7 @@
             } catch (error) {
                 console.error("Error loading data:", error);
                 setCloudStatus('offline');
-                alert("Failed to load data from Firebase. Check your connection.");
+                alert("Failed to load data from Firebase. Check your internet connection and Database Rules.");
             }
         }
 
@@ -568,7 +567,10 @@
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
 
                     reportData.forEach(item => {
-                        const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
+                        let docId = item.trackingId ? item.trackingId : item.orderId;
+                        docId = String(docId).replace(/\//g, '-').trim();
+                        if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                        
                         const docRef = collectionRef.doc(docId);
                         batch.set(docRef, item, { merge: true }); 
                     });
@@ -865,53 +867,66 @@
                         reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
                     };
                     
-                    const newRecords = rows.slice(1).filter(r => r.trim()).map((r, idx) => {
-                        const c = r.split('\t');
-                        let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
-                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid] : `NO-TRK-${Date.now()}-${idx}`; 
+                    let validRecords = [];
 
-                        // Strict formatting to prevent undefined errors in Firebase
-                        return { 
-                            orderId: (map.oid !== -1 && c[map.oid]) ? c[map.oid] : `UNKNOWN-OID-${idx}`, 
-                            reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "", 
-                            trackingId: tid, 
-                            sku: (map.sku !== -1 && c[map.sku]) ? c[map.sku] : "", 
-                            asin: (map.asin !== -1 && c[map.asin]) ? c[map.asin] : "", 
-                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "", 
-                            oAmt: amt, 
-                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1", 
+                    rows.slice(1).forEach((r, idx) => {
+                        if (!r.trim()) return; 
+
+                        const c = r.split('\t');
+                        if (c.length < 3) return;
+
+                        let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].trim() : "";
+                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].trim() : "";
+
+                        // If BOTH are completely empty, this is a garbage row from Amazon. Skip it.
+                        if (!oid && !tid) return;
+
+                        let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
+
+                        validRecords.push({
+                            orderId: oid || `UNKNOWN-OID-${Date.now()}-${idx}`,
+                            reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "",
+                            trackingId: tid,
+                            sku: (map.sku !== -1 && c[map.sku]) ? c[map.sku] : "",
+                            asin: (map.asin !== -1 && c[map.asin]) ? c[map.asin] : "",
+                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "",
+                            oAmt: amt,
+                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1",
                             status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
                             claimId: '', claimDate: '', amtRec: ''
-                        };
+                        });
                     });
+
+                    if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
 
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
                     
-                    // Firebase limits batch writes to 500. We chunk it into 400 to be safe.
                     const chunkSize = 400; 
-                    for (let i = 0; i < newRecords.length; i += chunkSize) {
-                        const chunk = newRecords.slice(i, i + chunkSize);
+                    for (let i = 0; i < validRecords.length; i += chunkSize) {
+                        const chunk = validRecords.slice(i, i + chunkSize);
                         const batch = db.batch();
 
                         chunk.forEach(item => {
-                            const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
-                            const docRef = collectionRef.doc(docId);
+                            // CRITICAL FIX: Ensure docId is NEVER empty and contains no slashes
+                            let docId = item.trackingId ? item.trackingId : item.orderId;
+                            docId = String(docId).replace(/\//g, '-').trim();
                             
-                            // merge: true is the magic! It adds the new item without overwriting existing warehouse scans
+                            if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+                            const docRef = collectionRef.doc(docId);
                             batch.set(docRef, item, { merge: true }); 
                         });
 
                         await batch.commit();
                     }
                     
-                    // Fetch the newly merged complete list from the cloud
                     await loadData();
-                    alert(`Success! Safely backed up ${newRecords.length} records into your All-Time Cloud Master File!`);
+                    alert(`Success! Safely backed up ${validRecords.length} records into your All-Time Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
                     console.error("Upload error:", err);
-                    alert("Cloud upload failed. Please check the file format and your internet connection.");
+                    alert(`Upload failed: ${err.message}\n\nPlease check your internet connection or Firebase Permissions.`);
                     setCloudStatus('offline');
                 }
             };
