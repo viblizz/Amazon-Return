@@ -23,7 +23,7 @@
 
         .dashboard-layout { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
         .sidebar { background: #202124; color: white; padding: 25px; display: flex; flex-direction: column; }
-        .sidebar h2 { color: #8ab4f8; margin-bottom: 40px; border-bottom: 1px solid #3c4043; padding-bottom: 10px; }
+        .sidebar h2 { color: #8ab4f8; margin-bottom: 20px; border-bottom: 1px solid #3c4043; padding-bottom: 10px; }
         .nav-btn { background: none; border: none; color: #bdc1c6; padding: 15px; text-align: left; cursor: pointer; font-size: 16px; border-radius: 8px; margin-bottom: 5px; }
         .nav-btn.active { background: #3c4043; color: white; }
         .nav-btn:hover:not(.active) { background: #303134; }
@@ -93,6 +93,11 @@
     <div id="dashboardScreen" class="dashboard-layout" style="display:none;">
         <div class="sidebar">
             <h2 id="currentWorkspaceTitle">Workspace</h2>
+            
+            <div id="cloudStatus" style="padding: 10px; margin-bottom: 25px; border-radius: 6px; background: #e8f5e9; color: #0f5132; font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #c3e6cb; transition: 0.3s;">
+                🟢 Cloud Connected
+            </div>
+
             <nav>
                 <button class="nav-btn" onclick="switchTab('counter', this)">📊 Counter</button>
                 <button class="nav-btn active" onclick="switchTab('ingestion', this)">1. Data Ingestion</button>
@@ -438,7 +443,7 @@
         const db = firebase.firestore();
 
         // ==============================================
-        // APPLICATION LOGIC
+        // APPLICATION LOGIC & VARIABLES
         // ==============================================
         const DEFAULT_CO = [
             { name: "Miss World", color: "#E91E63" },
@@ -453,6 +458,44 @@
         let orderIdCounts = {}; 
         let currentCompany = ""; 
 
+        // ==============================================
+        // CLOUD CONNECTION STATUS LOGIC
+        // ==============================================
+        const statusEl = document.getElementById('cloudStatus');
+
+        function setCloudStatus(state) {
+            if (!statusEl) return;
+            
+            if (state === 'online') {
+                statusEl.innerHTML = '🟢 Cloud Connected';
+                statusEl.style.background = '#e8f5e9';
+                statusEl.style.color = '#0f5132';
+                statusEl.style.borderColor = '#c3e6cb';
+            } else if (state === 'offline') {
+                statusEl.innerHTML = '🔴 Offline (Check Wi-Fi)';
+                statusEl.style.background = '#fce8e6';
+                statusEl.style.color = '#d93025';
+                statusEl.style.borderColor = '#fad2cf';
+            } else if (state === 'syncing') {
+                statusEl.innerHTML = '🟡 Syncing Data...';
+                statusEl.style.background = '#fff3cd';
+                statusEl.style.color = '#856404';
+                statusEl.style.borderColor = '#ffeeba';
+            }
+        }
+
+        // Listen for network changes in the background
+        window.addEventListener('online', () => setCloudStatus('online'));
+        window.addEventListener('offline', () => setCloudStatus('offline'));
+
+        // Set initial state when app loads
+        window.addEventListener('load', () => {
+            if (!navigator.onLine) setCloudStatus('offline');
+        });
+
+        // ==============================================
+        // INITIALIZATION
+        // ==============================================
         function init() {
             const grid = document.getElementById('profileGrid');
             grid.innerHTML = '';
@@ -485,6 +528,8 @@
             reportData = [];
             document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading data from cloud...</td></tr>';
             
+            setCloudStatus('syncing'); // Trigger Syncing Status
+            
             try {
                 const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
                 
@@ -502,14 +547,21 @@
                     document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">No data found. Upload a report.</td></tr>';
                 }
                 updateStats();
+                
+                // Return to Online/Offline status after finishing
+                setCloudStatus(navigator.onLine ? 'online' : 'offline'); 
+                
             } catch (error) {
                 console.error("Error loading data:", error);
+                setCloudStatus('offline'); // If it fails, assume connection issue
                 alert("Failed to load data from Firebase. Check your connection.");
             }
         }
 
         async function saveData() {
             if (currentCompany) {
+                setCloudStatus('syncing'); // Trigger Syncing Status
+                
                 try {
                     const batch = db.batch();
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
@@ -523,8 +575,13 @@
 
                     await batch.commit();
                     console.log("Master file synced to cloud.");
+                    
+                    // Return to Online/Offline status after finishing
+                    setCloudStatus(navigator.onLine ? 'online' : 'offline');
+                    
                 } catch (e) {
                     console.error("Error saving to Firebase:", e);
+                    setCloudStatus('offline'); // If it fails, assume connection issue
                     alert("Error syncing to the cloud.");
                 }
             }
@@ -571,6 +628,7 @@
                 }
                 
                 try {
+                    setCloudStatus('syncing');
                     // Delete all documents in the Firestore collection
                     const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
                     const batch = db.batch();
@@ -584,6 +642,7 @@
                     alert("Cloud data cleared.");
                 } catch(e) {
                     console.error("Error clearing data:", e);
+                    setCloudStatus('offline');
                     alert("Error clearing data from Firebase.");
                 }
             }
