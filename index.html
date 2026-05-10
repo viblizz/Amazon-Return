@@ -325,7 +325,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 15px;">
                     <div>
                         <h2>📋 All-Time Master Order File</h2>
-                        <p style="font-size: 13px; color: #666;">Read-only summary. Every item is treated as an individual row. Use <b>Export to Edit</b> to bulk edit in Excel.</p>
+                        <p style="font-size: 13px; color: #666;">Read-only summary. Use <b>Export to Edit</b> to download a template, update it in Excel, and upload it via <b>Upload Bulk Edit</b>.</p>
                     </div>
                     <div style="display:flex; gap:10px;">
                         <input type="file" id="bulkUploadFile" accept=".csv" style="display:none;" onchange="importBulkEdit(event)">
@@ -848,15 +848,13 @@
         }
 
         // ==============================================
-        // 1. DATA INGESTION
+        // 1. DATA INGESTION (DUPLICATE FIX VIA OCCURRENCE TRACKER)
         // ==============================================
         function processAmazonReport() {
             const fileInput = document.getElementById('amazonReport');
             const file = fileInput.files[0];
             
-            if(!file) {
-                return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
-            }
+            if(!file) return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
 
             setCloudStatus('syncing');
 
@@ -864,18 +862,24 @@
             reader.onload = async (e) => {
                 try {
                     const rows = e.target.result.split('\n');
-                    if(rows.length < 2) throw new Error("File appears to be empty or invalid.");
+                    if(rows.length < 2) throw new Error("File appears to be empty.");
                     
                     const h = rows[0].split('\t');
                     
                     const map = { 
-                        oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
+                        oid: h.indexOf('Order ID'), 
+                        reqDate: h.indexOf('Return request date'), 
                         oDate: h.findIndex(col => col.toLowerCase().includes('order date')), 
-                        tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
-                        reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
+                        tid: h.indexOf('Tracking ID'), 
+                        sku: h.indexOf(' Merchant SKU'), 
+                        asin: h.indexOf('ASIN'), 
+                        reason: h.indexOf('Return reason'), 
+                        oAmt: h.indexOf('Order Amount'), 
+                        oQty: h.indexOf('Order quantity') 
                     };
                     
                     let validRecords = [];
+                    let occurrenceTracker = {}; // Tracks duplicates with missing Tracking IDs
 
                     rows.slice(1).forEach((r, idx) => {
                         if (!r.trim()) return; 
@@ -890,12 +894,16 @@
                         let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].trim() : "";
                         let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].trim() : "";
 
-                        if (!oid && !tid) return;
+                        if (!oid && !tid) return; 
 
                         let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
+                        
+                        // Create a base ID. If multiple items have the exact same base ID, the occurrence tracker will separate them.
+                        let baseId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+                        if (!baseId || baseId === '__') baseId = `FALLBACK-${idx}`;
 
-                        let uniqueId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-                        if (!uniqueId || uniqueId === '__') uniqueId = `FALLBACK-${Date.now()}-${idx}`;
+                        occurrenceTracker[baseId] = (occurrenceTracker[baseId] || 0) + 1;
+                        let uniqueId = occurrenceTracker[baseId] > 1 ? `${baseId}_part${occurrenceTracker[baseId]}` : baseId;
 
                         validRecords.push({
                             uid: uniqueId,  
@@ -923,11 +931,7 @@
                         const batch = db.batch();
 
                         chunk.forEach(item => {
-                            let docId = item.trackingId ? item.trackingId : item.orderId;
-                            docId = String(docId).replace(/\//g, '-').trim();
-                            if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-
-                            const docRef = collectionRef.doc(docId);
+                            const docRef = collectionRef.doc(item.uid);
                             batch.set(docRef, item, { merge: true }); 
                         });
 
@@ -935,7 +939,7 @@
                     }
                     
                     await loadData();
-                    alert(`Success! Safely backed up ${validRecords.length} records into your All-Time Cloud Master File!`);
+                    alert(`Success! Safely merged ${validRecords.length} records into your All-Time Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
@@ -945,11 +949,7 @@
                 }
             };
             
-            reader.onerror = () => {
-                alert("Error reading file from your computer.");
-                setCloudStatus('offline');
-            };
-            
+            reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); };
             reader.readAsText(file);
         }
 
@@ -1103,8 +1103,6 @@
 
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
-                
-                // Hides 'Return Cancelled' items from the Safety Claims tab completely
                 if (d.conditionLog === 'Return Cancelled') return false; 
                 
                 if (d.delDate) {
@@ -1539,9 +1537,6 @@
             }
         }
 
-        // ==============================================
-        // SEQUENTIAL EXPORT LOGIC
-        // ==============================================
         function exportMasterExcel() {
             const checkboxes = document.querySelectorAll('.export-checkbox:checked');
             if (checkboxes.length === 0) return alert("Please select at least one order to export.");
@@ -1549,7 +1544,6 @@
             const selectedOids = Array.from(checkboxes).map(cb => cb.value);
             let dataToExport = reportData.filter(d => selectedOids.includes(d.orderId));
 
-            // CRITICAL FIX: Sort by Order ID so multi-item orders are written below each other sequentially
             dataToExport.sort((a, b) => a.orderId.localeCompare(b.orderId));
 
             let csv = "Order ID,Order Date,Tracking ID,ASIN,SKU,Req Date,Delivery Date,Amz Reason,Value,Exp Qty,Rec Qty,Base Status,Condition,Claim Status,Claim ID,Claim Date,Amount Received\n";
@@ -1571,7 +1565,7 @@
         }
 
         // ==============================================
-        // BULK IMPORT LOGIC 
+        // BULK IMPORT LOGIC
         // ==============================================
         function parseCSVLine(text) {
             let ret = [], col = "", inQuote = false;
