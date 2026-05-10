@@ -61,7 +61,7 @@
         .stat-val { font-weight: bold; color: #202124; }
         .stat-amt { color: #d93025; font-size: 11px; display: block; text-align: right; margin-top: 2px; }
 
-        .filter-input { width: 100%; padding: 6px; margin-top: 8px; font-size: 12px; border: 1px solid #dadce0; border-radius: 4px; box-sizing: border-box; }
+        .filter-input { width: 100%; padding: 6px; font-size: 12px; border: 1px solid #dadce0; border-radius: 4px; box-sizing: border-box; }
         .master-input { width: 100%; padding: 4px; border: 1px solid #dadce0; border-radius: 4px; background: white; font-size: 12px; margin-bottom: 4px; }
         .master-input:focus { border-color: #1a73e8; outline: none; }
 
@@ -217,20 +217,22 @@
                 <table>
                     <thead>
                         <tr style="background: #f8f9fa;">
-                            <th style="width:150px;">Del. Date<br>
-                                <select id="safetyDateType" class="filter-input safety-filter" onchange="toggleSafetyDateFilter(); filterSafety();" style="margin-bottom:4px;">
+                            <th style="width:150px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Del. Date</div>
+                                <select id="safetyDateType" class="filter-input safety-filter" onchange="toggleSafetyDateFilter(); filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="all">All Dates</option>
                                     <option value="exact">Exact Date</option>
                                     <option value="range">Date Range</option>
                                 </select>
-                                <input type="date" id="safetyDateExact" class="filter-input safety-filter" onchange="filterSafety()" style="display:none;">
-                                <div id="safetyDateRange" style="display:none; flex-direction:column; gap:2px;">
-                                    <input type="date" id="safetyDateStart" class="filter-input safety-filter" onchange="filterSafety()">
-                                    <input type="date" id="safetyDateEnd" class="filter-input safety-filter" onchange="filterSafety()">
+                                <input type="date" id="safetyDateExact" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0; display:none;">
+                                <div id="safetyDateRange" style="display:none; flex-direction:column; gap:4px; margin-top:0;">
+                                    <input type="date" id="safetyDateStart" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
+                                    <input type="date" id="safetyDateEnd" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
                                 </div>
                             </th>
-                            <th style="width:200px;">Order / Track / ASIN<br>
-                                <select id="safetySearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
+                            <th style="width:200px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Order / Track / ASIN</div>
+                                <select id="safetySearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="orderId">Order ID</option>
                                     <option value="trackingId">Tracking ID</option>
                                     <option value="asin">ASIN</option>
@@ -243,8 +245,9 @@
                                     </div>
                                 </div>
                             </th>
-                            <th>Condition<br>
-                                <select id="safetyCond" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top: 30px;">
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Condition</div>
+                                <select id="safetyCond" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
                                     <option value="">All Scanned</option>
                                     <option value="Saleable">Saleable</option>
                                     <option value="Damaged">Damaged</option>
@@ -253,8 +256,9 @@
                                     <option value="Lost">Lost</option>
                                 </select>
                             </th>
-                            <th style="width:180px;">Claim ID & Date Raised<br>
-                                <select id="safetyClaimSearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
+                            <th style="width:180px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Claim ID & Date Raised</div>
+                                <select id="safetyClaimSearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="claimId">Claim ID</option>
                                     <option value="claimDate">Date Raised</option>
                                 </select>
@@ -266,8 +270,9 @@
                                     </div>
                                 </div>
                             </th>
-                            <th style="width:150px;">Values & Qty<br>
-                                <select id="safetyValType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
+                            <th style="width:150px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Values & Qty</div>
+                                <select id="safetyValType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="oAmt">Order Value</option>
                                     <option value="oQty">Order Qty</option>
                                     <option value="amtRec">Amt Received</option>
@@ -281,8 +286,9 @@
                                     </div>
                                 </div>
                             </th>
-                            <th>Approval Status<br>
-                                <select id="safetyStatus" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top: 30px;">
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Approval Status</div>
+                                <select id="safetyStatus" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
                                     <option value="">All Statuses</option>
                                     <option value="None">None</option>
                                     <option value="Pending Claim">Pending</option>
@@ -319,7 +325,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 15px;">
                     <div>
                         <h2>📋 All-Time Master Order File</h2>
-                        <p style="font-size: 13px; color: #666;">Read-only summary. Use <b>Export to Edit</b> to bulk edit in Excel.</p>
+                        <p style="font-size: 13px; color: #666;">Read-only summary. Every item is treated as an individual row. Use <b>Export to Edit</b> to bulk edit in Excel.</p>
                     </div>
                     <div style="display:flex; gap:10px;">
                         <input type="file" id="bulkUploadFile" accept=".csv" style="display:none;" onchange="importBulkEdit(event)">
@@ -331,43 +337,60 @@
                 <table id="masterFilterTable">
                     <thead>
                         <tr style="background: #e8f0fe;">
-                            <th style="text-align: center; vertical-align: middle; width: 50px;">
-                                <input type="checkbox" id="selectAllMaster" onclick="toggleSelectAll()"><br><span style="font-size:10px;">Select All</span>
+                            <th style="text-align: center; vertical-align: top; width: 50px;">
+                                <input type="checkbox" id="selectAllMaster" onclick="toggleSelectAll()" style="margin-bottom:4px;"><br><span style="font-size:10px;">Select All</span>
                             </th>
-                            <th style="width:200px;">Order / Track / ASIN<br>
-                                <select id="masterSearchType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
-                                    <option value="orderId">Order ID</option>
-                                    <option value="trackingId">Tracking ID</option>
-                                    <option value="asin">ASIN</option>
-                                </select>
+                            
+                            <th style="width:160px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Order ID</div>
                                 <div class="ms-dropdown">
-                                    <div class="ms-btn" onclick="toggleMS('ms-masterSearch')">Select Items...</div>
-                                    <div class="ms-content" id="ms-masterSearch">
+                                    <div class="ms-btn" onclick="toggleMS('ms-masterOrderId')">Select Orders...</div>
+                                    <div class="ms-content" id="ms-masterOrderId">
                                         <input type="text" class="ms-search" placeholder="Search..." onkeyup="filterMSLocal(this)">
-                                        <div class="ms-options" id="ms-opt-masterSearch"></div>
+                                        <div class="ms-options" id="ms-opt-masterOrderId"></div>
                                     </div>
                                 </div>
                             </th>
-                            <th style="width:150px;">Dates<br>
-                                <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-bottom:4px;">
+                            
+                            <th style="width:200px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Tracking / ASIN / SKU</div>
+                                <select id="masterItemSearchType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
+                                    <option value="trackingId">Tracking ID</option>
+                                    <option value="asin">ASIN</option>
+                                    <option value="sku">SKU</option>
+                                </select>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-masterItemSearch')">Select Items...</div>
+                                    <div class="ms-content" id="ms-masterItemSearch">
+                                        <input type="text" class="ms-search" placeholder="Search..." onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-masterItemSearch"></div>
+                                    </div>
+                                </div>
+                            </th>
+                            
+                            <th style="width:150px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Dates</div>
+                                <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; margin-bottom:4px;">
                                     <option value="reqDate">Req Date</option>
                                     <option value="orderDate">Order Date</option>
                                     <option value="delDate">Del Date</option>
                                     <option value="claimDate">Claim Date</option>
                                 </select>
-                                <select id="masterDateType" class="filter-input master-filter" onchange="toggleMasterDateFilter(); filterMaster();" style="margin-bottom:4px;">
+                                <select id="masterDateType" class="filter-input master-filter" onchange="toggleMasterDateFilter(); filterMaster();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="all">All Dates</option>
                                     <option value="exact">Exact Date</option>
                                     <option value="range">Date Range</option>
                                 </select>
-                                <input type="date" id="masterDateExact" class="filter-input master-filter" onchange="filterMaster()" style="display:none;">
-                                <div id="masterDateRange" style="display:none; flex-direction:column; gap:2px;">
-                                    <input type="date" id="masterDateStart" class="filter-input master-filter" onchange="filterMaster()">
-                                    <input type="date" id="masterDateEnd" class="filter-input master-filter" onchange="filterMaster()">
+                                <input type="date" id="masterDateExact" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; display:none;">
+                                <div id="masterDateRange" style="display:none; flex-direction:column; gap:4px; margin-top:0;">
+                                    <input type="date" id="masterDateStart" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
+                                    <input type="date" id="masterDateEnd" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
                                 </div>
                             </th>
-                            <th style="width:150px;">Value & Exp Qty<br>
-                                <select id="masterValType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
+                            
+                            <th style="width:150px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Value & Exp Qty</div>
+                                <select id="masterValType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="oAmt">Order Value</option>
                                     <option value="oQty">Exp Qty</option>
                                 </select>
@@ -379,8 +402,10 @@
                                     </div>
                                 </div>
                             </th>
-                            <th>Status & Condition<br>
-                                <select id="masterStatus" class="filter-input master-filter" onchange="filterMaster()" style="margin-bottom: 2px; margin-top: 25px;">
+                            
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Status & Condition</div>
+                                <select id="masterStatus" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; margin-bottom:4px;">
                                     <option value="">All Statuses</option>
                                     <option value="In Transit">In Transit</option>
                                     <option value="Pending Scan">Pending Scan</option>
@@ -398,8 +423,10 @@
                                     <option value="Return Cancelled">Return Cancelled</option>
                                 </select>
                             </th>
-                            <th style="width:150px;">Rec Qty & Amt<br>
-                                <select id="masterRecType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
+                            
+                            <th style="width:150px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Rec Qty & Amt</div>
+                                <select id="masterRecType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="recQty">Received Qty</option>
                                     <option value="amtRec">Amt Received</option>
                                 </select>
@@ -411,8 +438,10 @@
                                     </div>
                                 </div>
                             </th>
-                            <th>Claim Status<br>
-                                <select id="masterClaim" class="filter-input master-filter" onchange="filterMaster()" style="margin-top: 55px;">
+                            
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Claim Status</div>
+                                <select id="masterClaim" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
                                     <option value="">All Claims</option>
                                     <option value="None">None</option>
                                     <option value="Pending Claim">Pending</option>
@@ -420,7 +449,10 @@
                                     <option value="Approved">Approved</option>
                                 </select>
                             </th>
-                            <th>Actions</th>
+                            
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Actions</div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="masterTableBody"></tbody>
@@ -822,7 +854,9 @@
             const fileInput = document.getElementById('amazonReport');
             const file = fileInput.files[0];
             
-            if(!file) return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
+            if(!file) {
+                return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
+            }
 
             setCloudStatus('syncing');
 
@@ -830,20 +864,15 @@
             reader.onload = async (e) => {
                 try {
                     const rows = e.target.result.split('\n');
-                    if(rows.length < 2) throw new Error("File appears to be empty.");
+                    if(rows.length < 2) throw new Error("File appears to be empty or invalid.");
                     
                     const h = rows[0].split('\t');
                     
                     const map = { 
-                        oid: h.indexOf('Order ID'), 
-                        reqDate: h.indexOf('Return request date'), 
+                        oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
                         oDate: h.findIndex(col => col.toLowerCase().includes('order date')), 
-                        tid: h.indexOf('Tracking ID'), 
-                        sku: h.indexOf(' Merchant SKU'), 
-                        asin: h.indexOf('ASIN'), 
-                        reason: h.indexOf('Return reason'), 
-                        oAmt: h.indexOf('Order Amount'), 
-                        oQty: h.indexOf('Order quantity') 
+                        tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
+                        reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
                     };
                     
                     let validRecords = [];
@@ -855,17 +884,16 @@
                         if (c.length < 3) return;
 
                         let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].trim() : "";
-                        
                         if (oid === 'Order ID') return; 
                         
                         let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].trim() : "";
                         let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].trim() : "";
                         let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].trim() : "";
 
-                        if (!oid && !tid) return; 
+                        if (!oid && !tid) return;
 
                         let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
-                        
+
                         let uniqueId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
                         if (!uniqueId || uniqueId === '__') uniqueId = `FALLBACK-${Date.now()}-${idx}`;
 
@@ -895,7 +923,11 @@
                         const batch = db.batch();
 
                         chunk.forEach(item => {
-                            const docRef = collectionRef.doc(item.uid);
+                            let docId = item.trackingId ? item.trackingId : item.orderId;
+                            docId = String(docId).replace(/\//g, '-').trim();
+                            if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+                            const docRef = collectionRef.doc(docId);
                             batch.set(docRef, item, { merge: true }); 
                         });
 
@@ -903,7 +935,7 @@
                     }
                     
                     await loadData();
-                    alert(`Success! Safely merged ${validRecords.length} records into your All-Time Cloud Master File!`);
+                    alert(`Success! Safely backed up ${validRecords.length} records into your All-Time Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
@@ -913,7 +945,11 @@
                 }
             };
             
-            reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); };
+            reader.onerror = () => {
+                alert("Error reading file from your computer.");
+                setCloudStatus('offline');
+            };
+            
             reader.readAsText(file);
         }
 
@@ -1068,7 +1104,7 @@
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
                 
-                // CRITICAL: Hides 'Return Cancelled' items from the Safety Claims tab completely
+                // Hides 'Return Cancelled' items from the Safety Claims tab completely
                 if (d.conditionLog === 'Return Cancelled') return false; 
                 
                 if (d.delDate) {
@@ -1285,10 +1321,9 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE (FRONTEND GROUPING)
+        // 6. MASTER FILE (FRONTEND GROUPING & COLUMN ALIGNMENT)
         // ==============================================
         function renderMasterTable() {
-            // Group the data specifically for the frontend UI display
             const groupedData = {};
             reportData.forEach(d => {
                 if(!groupedData[d.orderId]) groupedData[d.orderId] = [];
@@ -1304,11 +1339,9 @@
             const oid = items[0].orderId;
             const isMultiple = items.length > 1;
             
-            // Highlight multiple tracking rows
             let dupHtml = isMultiple ? `background-color:#fff3cd; border-left:4px solid #ffc107;` : ``;
             let dupWarn = isMultiple ? `<br><span style="color:#d39e00; font-size:10px; font-weight:bold;">⚠️ MULTIPLE TRACKINGS</span>` : ``;
 
-            // Stack details with horizontal lines for multi-item orders
             let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}<br><b>SKU:</b> ${d.sku}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${d.orderDate||'-'}<br>Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let valQtyHtml = items.map(d => `<div style="padding:4px 0;">Val: <b>${d.oAmt}</b><br>Exp Qty: ${d.oQty}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
@@ -1405,8 +1438,10 @@
         }
 
         function filterMaster() {
-            const searchType = document.getElementById("masterSearchType").value;
-            const searchVals = getMSSelected('ms-opt-masterSearch');
+            const orderVals = getMSSelected('ms-opt-masterOrderId');
+            
+            const itemSearchType = document.getElementById("masterItemSearchType").value;
+            const itemSearchVals = getMSSelected('ms-opt-masterItemSearch');
             
             const dateTarget = document.getElementById("masterDateTarget").value; 
             const dateType = document.getElementById("masterDateType").value;
@@ -1426,16 +1461,17 @@
 
             const tr = document.getElementById("masterTableBody").getElementsByTagName("tr");
 
-            let aSearch = new Set(), aVal = new Set(), aRec = new Set();
+            let aOrderId = new Set(), aItemSearch = new Set(), aVal = new Set(), aRec = new Set();
 
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
-                const oidBox = row.querySelector('.export-checkbox');
-                if(!oidBox) continue; 
+                const uidBox = row.querySelector('.export-checkbox');
+                if(!uidBox) continue; 
                 
-                const oid = oidBox.value;
-                // Get all grouped items for filtering
+                const oid = uidBox.value;
                 const items = reportData.filter(item => item.orderId === oid);
+
+                let mOrderId = orderVals.length === 0 || orderVals.includes(oid.toUpperCase());
 
                 let mDate = items.some(d => {
                     const dVal = d[dateTarget] || "";
@@ -1463,7 +1499,7 @@
                     return (el ? el.value : d.claimStatus).toUpperCase().includes(claimFilter);
                 }) || claimFilter === "";
 
-                let mSearch = searchVals.length === 0 || items.some(d => searchVals.includes((d[searchType]||"").toString().toUpperCase()));
+                let mItemSearch = itemSearchVals.length === 0 || items.some(d => itemSearchVals.includes((d[itemSearchType]||"").toString().toUpperCase()));
                 let mVal = valVals.length === 0 || items.some(d => valVals.includes((d[valType]||"").toString().toUpperCase()));
                 
                 let mRec = recVals.length === 0 || items.some(d => {
@@ -1472,19 +1508,21 @@
                     return recVals.includes((v||"").toString().toUpperCase());
                 });
 
-                if (mDate && mStatus && mCond && mClaim && mSearch && mVal && mRec) row.style.display = "";
+                if (mOrderId && mDate && mStatus && mCond && mClaim && mItemSearch && mVal && mRec) row.style.display = "";
                 else row.style.display = "none";
 
                 let mOther = mDate && mStatus && mCond && mClaim;
-                if(mOther && mVal && mRec) items.forEach(d => aSearch.add(d[searchType]));
-                if(mOther && mSearch && mRec) items.forEach(d => aVal.add(d[valType]));
-                if(mOther && mSearch && mVal) items.forEach(d => {
+                if(mOther && mItemSearch && mVal && mRec) aOrderId.add(oid);
+                if(mOther && mOrderId && mVal && mRec) items.forEach(d => aItemSearch.add(d[itemSearchType]));
+                if(mOther && mOrderId && mItemSearch && mRec) items.forEach(d => aVal.add(d[valType]));
+                if(mOther && mOrderId && mItemSearch && mVal) items.forEach(d => {
                     const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.uid}`);
                     aRec.add(el ? el.value : d[recType]);
                 });
             }
             
-            populateMS('ms-opt-masterSearch', [...aSearch], 'filterMaster');
+            populateMS('ms-opt-masterOrderId', [...aOrderId], 'filterMaster');
+            populateMS('ms-opt-masterItemSearch', [...aItemSearch], 'filterMaster');
             populateMS('ms-opt-masterValSearch', [...aVal], 'filterMaster');
             populateMS('ms-opt-masterRecSearch', [...aRec], 'filterMaster');
         }
@@ -1509,8 +1547,6 @@
             if (checkboxes.length === 0) return alert("Please select at least one order to export.");
 
             const selectedOids = Array.from(checkboxes).map(cb => cb.value);
-            
-            // Extract the individual rows for the export file
             let dataToExport = reportData.filter(d => selectedOids.includes(d.orderId));
 
             // CRITICAL FIX: Sort by Order ID so multi-item orders are written below each other sequentially
@@ -1535,7 +1571,7 @@
         }
 
         // ==============================================
-        // BULK IMPORT LOGIC
+        // BULK IMPORT LOGIC 
         // ==============================================
         function parseCSVLine(text) {
             let ret = [], col = "", inQuote = false;
