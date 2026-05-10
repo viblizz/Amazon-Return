@@ -550,7 +550,7 @@
         function save() { localStorage.setItem('userCos', JSON.stringify(companies)); }
 
         // ==============================================
-        // DATA PERSISTENCE (FIREBASE CLOUD STORAGE)
+        // DATA PERSISTENCE & CHUNKED CLOUD STORAGE
         // ==============================================
         async function loadData() {
             reportData = [];
@@ -592,15 +592,22 @@
             if (currentCompany) {
                 setCloudStatus('syncing'); 
                 try {
-                    const batch = db.batch();
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-
-                    reportData.forEach(item => {
-                        const docRef = collectionRef.doc(item.uid);
-                        batch.set(docRef, item, { merge: true }); 
-                    });
-
-                    await batch.commit();
+                    
+                    // CRITICAL FIX: Safe Batching for >500 items
+                    const chunkSize = 400;
+                    for (let i = 0; i < reportData.length; i += chunkSize) {
+                        const chunk = reportData.slice(i, i + chunkSize);
+                        const batch = db.batch();
+                        
+                        chunk.forEach(item => {
+                            const docRef = collectionRef.doc(item.uid);
+                            batch.set(docRef, item, { merge: true }); 
+                        });
+                        
+                        await batch.commit();
+                    }
+                    
                     setCloudStatus(navigator.onLine ? 'online' : 'offline');
                 } catch (e) {
                     console.error("Error saving to Firebase:", e);
@@ -647,20 +654,35 @@
         async function clearCompanyData() {
             if(confirm("Are you sure you want to clear all ALL-TIME saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
                 if (reportData.length > 0) exportBackup(); 
+                
                 try {
                     setCloudStatus('syncing');
                     const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
-                    const batch = db.batch();
-                    snapshot.docs.forEach((doc) => { batch.delete(doc.ref); });
-                    await batch.commit();
+                    
+                    // CRITICAL FIX: Delete chunking to prevent Firebase 500-limit crashes
+                    const docs = snapshot.docs;
+                    const chunkSize = 400;
+                    for (let i = 0; i < docs.length; i += chunkSize) {
+                        const chunk = docs.slice(i, i + chunkSize);
+                        const batch = db.batch();
+                        chunk.forEach((doc) => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                    }
                     
                     reportData = [];
-                    loadData();
+                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">No data found. Upload a report.</td></tr>';
+                    updateStats();
+                    if(document.getElementById('master').classList.contains('active')) renderMasterTable();
+                    if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
+                    
                     alert("Cloud data cleared.");
+                    setCloudStatus(navigator.onLine ? 'online' : 'offline');
                 } catch(e) {
                     console.error("Error clearing data:", e);
                     setCloudStatus('offline');
-                    alert("Error clearing data from Firebase.");
+                    alert("Error clearing data from Firebase. Check console for details.");
                 }
             }
         }
@@ -848,7 +870,7 @@
         }
 
         // ==============================================
-        // 1. DATA INGESTION (DUPLICATE FIX VIA OCCURRENCE TRACKER)
+        // 1. DATA INGESTION
         // ==============================================
         function processAmazonReport() {
             const fileInput = document.getElementById('amazonReport');
@@ -879,7 +901,7 @@
                     };
                     
                     let validRecords = [];
-                    let occurrenceTracker = {}; // Tracks duplicates with missing Tracking IDs
+                    let occurrenceTracker = {}; 
 
                     rows.slice(1).forEach((r, idx) => {
                         if (!r.trim()) return; 
@@ -898,7 +920,6 @@
 
                         let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
                         
-                        // Create a base ID. If multiple items have the exact same base ID, the occurrence tracker will separate them.
                         let baseId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
                         if (!baseId || baseId === '__') baseId = `FALLBACK-${idx}`;
 
@@ -1319,7 +1340,7 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE (FRONTEND GROUPING & COLUMN ALIGNMENT)
+        // 6. MASTER FILE (FRONTEND GROUPING)
         // ==============================================
         function renderMasterTable() {
             const groupedData = {};
