@@ -52,7 +52,6 @@
         .scan-locked { background-color: #fce8e6; border-color: #d93025 !important; cursor: not-allowed; }
         .active-scan-row { border: 2px solid #1a73e8 !important; background-color: #e8f0fe !important; }
 
-        /* ADVANCED STATS DASHBOARD */
         .stats-controls { display: flex; gap: 10px; align-items: center; background: #e8f0fe; padding: 10px 15px; border-radius: 8px 8px 0 0; border: 1px solid #c2e0ff; border-bottom: none; font-size: 13px; font-weight: bold; color: #174ea6; }
         .stats-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; background: #f8fbff; border: 1px solid #c2e0ff; border-radius: 0 0 8px 8px; padding: 15px; }
         .stat-card { background: white; border: 1px solid #dadce0; border-radius: 6px; padding: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -66,7 +65,6 @@
         .master-input { width: 100%; padding: 4px; border: 1px solid #dadce0; border-radius: 4px; background: white; font-size: 12px; margin-bottom: 4px; }
         .master-input:focus { border-color: #1a73e8; outline: none; }
 
-        /* MULTI-SELECT DROPDOWN STYLES */
         .ms-dropdown { position: relative; display: inline-block; width: 100%; }
         .ms-btn { width: 100%; padding: 6px; border: 1px solid #dadce0; border-radius: 4px; background: white; text-align: left; cursor: pointer; font-size: 12px; }
         .ms-btn::after { content: ' ▼'; float: right; font-size: 10px; margin-top: 2px; }
@@ -138,8 +136,7 @@
                         <input type="date" id="statsEndDate" class="master-input" style="width:130px; margin:0;" onchange="updateStats()">
                     </span>
                 </div>
-                <div id="statsBar" class="stats-container">
-                    </div>
+                <div id="statsBar" class="stats-container"></div>
             </div>
 
             <div id="ingestion" class="tab-pane active">
@@ -153,7 +150,6 @@
                             <input type="file" id="amazonReport" accept=".tsv,.txt" style="max-width: 250px;">
                             <button class="action-btn" onclick="processAmazonReport()" style="background:#0F5132;">📤 Upload Data</button>
                         </div>
-
                     </div>
                 </div>
                 
@@ -162,7 +158,7 @@
                     <table id="ingestionTable">
                         <thead>
                             <tr>
-                                <th>Req. Date</th><th>Order ID</th><th>Tracking ID</th><th>ASIN</th><th>SKU</th><th>Amz Reason</th><th>Order Value</th><th>Order Qty</th>
+                                <th>Order Date</th><th>Req. Date</th><th>Order ID</th><th>Tracking ID</th><th>ASIN</th><th>SKU</th><th>Amz Reason</th><th>Order Value</th><th>Order Qty</th>
                             </tr>
                         </thead>
                         <tbody id="ingestionTableBody"></tbody>
@@ -323,7 +319,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 15px;">
                     <div>
                         <h2>📋 All-Time Master Order File</h2>
-                        <p style="font-size: 13px; color: #666;">Read-only summary. Use <b>Export to Edit</b> to download a template, update it in Excel, and upload it via <b>Upload Bulk Edit</b>.</p>
+                        <p style="font-size: 13px; color: #666;">Read-only summary. Use <b>Export to Edit</b> to bulk edit in Excel.</p>
                     </div>
                     <div style="display:flex; gap:10px;">
                         <input type="file" id="bulkUploadFile" accept=".csv" style="display:none;" onchange="importBulkEdit(event)">
@@ -355,6 +351,7 @@
                             <th style="width:150px;">Dates<br>
                                 <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-bottom:4px;">
                                     <option value="reqDate">Req Date</option>
+                                    <option value="orderDate">Order Date</option>
                                     <option value="delDate">Del Date</option>
                                     <option value="claimDate">Claim Date</option>
                                 </select>
@@ -398,6 +395,7 @@
                                     <option value="Missing Quantity">Missing Quantity</option>
                                     <option value="Lost">Lost</option>
                                     <option value="Fake">Fake</option>
+                                    <option value="Return Cancelled">Return Cancelled</option>
                                 </select>
                             </th>
                             <th style="width:150px;">Rec Qty & Amt<br>
@@ -460,7 +458,6 @@
         let expectedDeliveries = []; 
         let scanTimer;
         let editingSafetyRows = []; 
-        let orderIdCounts = {}; 
         let currentCompany = ""; 
 
         // ==============================================
@@ -470,7 +467,6 @@
 
         function setCloudStatus(state) {
             if (!statusEl) return;
-            
             if (state === 'online') {
                 statusEl.innerHTML = '🟢 Cloud Connected';
                 statusEl.style.background = '#e8f5e9';
@@ -526,7 +522,7 @@
         // ==============================================
         async function loadData() {
             reportData = [];
-            document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading ALL-TIME data from cloud...</td></tr>';
+            document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading ALL-TIME data from cloud...</td></tr>';
             
             setCloudStatus('syncing'); 
             
@@ -534,19 +530,21 @@
                 const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
                 
                 snapshot.forEach(doc => {
-                    reportData.push(doc.data());
+                    let data = doc.data();
+                    if (!data.uid) data.uid = doc.id; 
+                    reportData.push(data);
                 });
 
                 if (reportData.length > 0) {
                     reportData.sort((a,b) => new Date(b.reqDate) - new Date(a.reqDate));
                     
                     document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
-                        <tr><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
+                        <tr><td>${d.orderDate||'-'}</td><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
                         <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
                         <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
                     `).join('');
                 } else {
-                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">No data found. Upload a report.</td></tr>';
+                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">No data found. Upload a report.</td></tr>';
                 }
                 updateStats();
                 setCloudStatus(navigator.onLine ? 'online' : 'offline'); 
@@ -561,23 +559,17 @@
         async function saveData() {
             if (currentCompany) {
                 setCloudStatus('syncing'); 
-                
                 try {
                     const batch = db.batch();
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
 
                     reportData.forEach(item => {
-                        let docId = item.trackingId ? item.trackingId : item.orderId;
-                        docId = String(docId).replace(/\//g, '-').trim();
-                        if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-                        
-                        const docRef = collectionRef.doc(docId);
+                        const docRef = collectionRef.doc(item.uid);
                         batch.set(docRef, item, { merge: true }); 
                     });
 
                     await batch.commit();
                     setCloudStatus(navigator.onLine ? 'online' : 'offline');
-                    
                 } catch (e) {
                     console.error("Error saving to Firebase:", e);
                     setCloudStatus('offline');
@@ -622,17 +614,12 @@
 
         async function clearCompanyData() {
             if(confirm("Are you sure you want to clear all ALL-TIME saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
-                if (reportData.length > 0) {
-                    exportBackup(); 
-                }
-                
+                if (reportData.length > 0) exportBackup(); 
                 try {
                     setCloudStatus('syncing');
                     const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
                     const batch = db.batch();
-                    snapshot.docs.forEach((doc) => {
-                        batch.delete(doc.ref);
-                    });
+                    snapshot.docs.forEach((doc) => { batch.delete(doc.ref); });
                     await batch.commit();
                     
                     reportData = [];
@@ -660,16 +647,12 @@
         // ==============================================
         // MULTI-SELECT FILTER UI LOGIC
         // ==============================================
-        function toggleMS(id) {
-            document.getElementById(id).classList.toggle('show');
-        }
-
+        function toggleMS(id) { document.getElementById(id).classList.toggle('show'); }
         window.onclick = function(event) {
             if (!event.target.closest('.ms-dropdown')) {
                 document.querySelectorAll('.ms-content.show').forEach(el => el.classList.remove('show'));
             }
         }
-
         function filterMSLocal(input) {
             const filter = input.value.toUpperCase();
             const labels = input.nextElementSibling.getElementsByTagName('label');
@@ -678,22 +661,17 @@
                 labels[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
             }
         }
-
         function populateMS(containerId, values, callbackName) {
             const container = document.getElementById(containerId);
             if(!container) return;
-            
             let cleanVals = values.filter(v => v !== undefined && v !== null && v !== "").map(v=>v.toString());
             cleanVals.sort((a, b) => a.localeCompare(b, undefined, {numeric: true})); 
-            
             const checkedBoxes = Array.from(container.querySelectorAll('input:checked')).map(cb => cb.value);
-            
             container.innerHTML = cleanVals.map(v => {
                 const isChecked = checkedBoxes.includes(v) ? 'checked' : '';
                 return `<label class="ms-label"><input type="checkbox" value="${v}" onchange="${callbackName}()" ${isChecked}> ${v}</label>`;
             }).join('');
         }
-
         function getMSSelected(containerId) {
             const container = document.getElementById(containerId);
             if(!container) return [];
@@ -776,14 +754,11 @@
 
             let totalConditionCost = cDamaged.cost + cDiff.cost + cMiss.cost + cLost.cost; 
             let totalClaimReceived = cDamaged.v + cDiff.v + cMiss.v + cLost.v + cFake.v;
-            
             let plAmount = totalClaimReceived - totalConditionCost;
             let plPercentage = totalConditionCost > 0 ? (plAmount / totalConditionCost) * 100 : 0;
-            
             let plColor = plAmount >= 0 ? "#0f5132" : "#d93025"; 
             let plBg = plAmount >= 0 ? "#e8f5e9" : "#fce8e6";
             let plText = plAmount >= 0 ? "Profit" : "Loss";
-
             const formatAmt = (num) => "₹" + num.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
             container.innerHTML = `
@@ -841,15 +816,13 @@
         }
 
         // ==============================================
-        // 1. DATA INGESTION (UPDATED WITH EXPLICIT UPLOAD + SANITIZATION)
+        // 1. DATA INGESTION
         // ==============================================
         function processAmazonReport() {
             const fileInput = document.getElementById('amazonReport');
             const file = fileInput.files[0];
             
-            if(!file) {
-                return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
-            }
+            if(!file) return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
 
             setCloudStatus('syncing');
 
@@ -857,14 +830,20 @@
             reader.onload = async (e) => {
                 try {
                     const rows = e.target.result.split('\n');
-                    if(rows.length < 2) throw new Error("File appears to be empty or invalid.");
+                    if(rows.length < 2) throw new Error("File appears to be empty.");
                     
                     const h = rows[0].split('\t');
                     
                     const map = { 
-                        oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
-                        tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
-                        reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
+                        oid: h.indexOf('Order ID'), 
+                        reqDate: h.indexOf('Return request date'), 
+                        oDate: h.findIndex(col => col.toLowerCase().includes('order date')), 
+                        tid: h.indexOf('Tracking ID'), 
+                        sku: h.indexOf(' Merchant SKU'), 
+                        asin: h.indexOf('ASIN'), 
+                        reason: h.indexOf('Return reason'), 
+                        oAmt: h.indexOf('Order Amount'), 
+                        oQty: h.indexOf('Order quantity') 
                     };
                     
                     let validRecords = [];
@@ -876,19 +855,28 @@
                         if (c.length < 3) return;
 
                         let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].trim() : "";
+                        
+                        if (oid === 'Order ID') return; 
+                        
                         let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].trim() : "";
+                        let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].trim() : "";
+                        let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].trim() : "";
 
-                        // If BOTH are completely empty, this is a garbage row from Amazon. Skip it.
-                        if (!oid && !tid) return;
+                        if (!oid && !tid) return; 
 
                         let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
+                        
+                        let uniqueId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
+                        if (!uniqueId || uniqueId === '__') uniqueId = `FALLBACK-${Date.now()}-${idx}`;
 
                         validRecords.push({
+                            uid: uniqueId,  
+                            orderDate: (map.oDate !== -1 && c[map.oDate]) ? c[map.oDate] : "",
                             orderId: oid || `UNKNOWN-OID-${Date.now()}-${idx}`,
                             reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "",
                             trackingId: tid,
-                            sku: (map.sku !== -1 && c[map.sku]) ? c[map.sku] : "",
-                            asin: (map.asin !== -1 && c[map.asin]) ? c[map.asin] : "",
+                            sku: sku,
+                            asin: asin,
                             amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "",
                             oAmt: amt,
                             oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1",
@@ -907,13 +895,7 @@
                         const batch = db.batch();
 
                         chunk.forEach(item => {
-                            // CRITICAL FIX: Ensure docId is NEVER empty and contains no slashes
-                            let docId = item.trackingId ? item.trackingId : item.orderId;
-                            docId = String(docId).replace(/\//g, '-').trim();
-                            
-                            if(!docId) docId = `FALLBACK-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-
-                            const docRef = collectionRef.doc(docId);
+                            const docRef = collectionRef.doc(item.uid);
                             batch.set(docRef, item, { merge: true }); 
                         });
 
@@ -921,7 +903,7 @@
                     }
                     
                     await loadData();
-                    alert(`Success! Safely backed up ${validRecords.length} records into your All-Time Cloud Master File!`);
+                    alert(`Success! Safely merged ${validRecords.length} records into your All-Time Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
@@ -931,11 +913,7 @@
                 }
             };
             
-            reader.onerror = () => {
-                alert("Error reading file from your computer.");
-                setCloudStatus('offline');
-            };
-            
+            reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); };
             reader.readAsText(file);
         }
 
@@ -986,12 +964,12 @@
         function renderScanTable() {
             const pendingScans = expectedDeliveries.filter(d => d.status === 'Pending Scan');
             document.getElementById('scanTableBody').innerHTML = pendingScans.map(d => `
-                <tr id="row-${d.trackingId}">
+                <tr id="row-${d.uid}">
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
                     <td>${d.trackingId}</td>
                     <td style="font-size:12px;"><b>Val:</b> ${d.oAmt}<br><b>Exp Qty:</b> ${d.oQty}</td>
                     <td>
-                        <select id="cond-${d.trackingId}" disabled style="width:100%; padding:4px;">
+                        <select id="cond-${d.uid}" disabled style="width:100%; padding:4px;">
                             <option value="">-Select Condition-</option>
                             <option value="Saleable">Saleable</option>
                             <option value="Damaged">Damaged</option>
@@ -1001,8 +979,8 @@
                         </select>
                     </td>
                     <td>
-                        <input type="number" id="qty-${d.trackingId}" placeholder="Rec. Qty" style="width:70px;" disabled>
-                        <button id="saveBtn-${d.trackingId}" onclick="logItem('${d.trackingId}')" class="save-btn" style="margin-left:10px; width:auto;" disabled>Save</button>
+                        <input type="number" id="qty-${d.uid}" placeholder="Rec. Qty" style="width:70px;" disabled>
+                        <button id="saveBtn-${d.uid}" onclick="logItem('${d.uid}')" class="save-btn" style="margin-left:10px; width:auto;" disabled>Save</button>
                     </td>
                 </tr>`).join('');
         }
@@ -1026,14 +1004,14 @@
                     feedback.style.color = "green";
                     input.value = '';
                     
-                    const row = document.getElementById(`row-${item.trackingId}`);
+                    const row = document.getElementById(`row-${item.uid}`);
                     row.classList.add('active-scan-row');
                     document.getElementById('scanTableBody').prepend(row);
                     
-                    document.getElementById(`cond-${item.trackingId}`).disabled = false;
-                    document.getElementById(`qty-${item.trackingId}`).disabled = false;
-                    document.getElementById(`saveBtn-${item.trackingId}`).disabled = false;
-                    document.getElementById(`cond-${item.trackingId}`).focus();
+                    document.getElementById(`cond-${item.uid}`).disabled = false;
+                    document.getElementById(`qty-${item.uid}`).disabled = false;
+                    document.getElementById(`saveBtn-${item.uid}`).disabled = false;
+                    document.getElementById(`cond-${item.uid}`).focus();
                 } else { 
                     input.classList.add('highlight-red'); 
                     feedback.innerText = `Not Found or Already Scanned: ${val}`;
@@ -1043,10 +1021,10 @@
             }, 150); 
         }
 
-        function logItem(tid) {
-            const item = expectedDeliveries.find(d => d.trackingId === tid);
-            const cond = document.getElementById(`cond-${tid}`).value;
-            const recQty = document.getElementById(`qty-${tid}`).value;
+        function logItem(uid) {
+            const item = expectedDeliveries.find(d => d.uid === uid);
+            const cond = document.getElementById(`cond-${uid}`).value;
+            const recQty = document.getElementById(`qty-${uid}`).value;
 
             if (!cond) return alert("Please select a condition.");
             if (cond !== 'Lost' && !recQty) return alert("Please enter the Received Quantity.");
@@ -1066,7 +1044,7 @@
             }
             
             saveData(); 
-            document.getElementById(`row-${tid}`).style.display = 'none';
+            document.getElementById(`row-${uid}`).style.display = 'none';
             unlockScanner();
             updateStats();
         }
@@ -1089,6 +1067,10 @@
 
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
+                
+                // CRITICAL: Hides 'Return Cancelled' items from the Safety Claims tab completely
+                if (d.conditionLog === 'Return Cancelled') return false; 
+                
                 if (d.delDate) {
                     let dDate = new Date(d.delDate);
                     dDate.setHours(0, 0, 0, 0);
@@ -1108,7 +1090,7 @@
 
             document.getElementById('safetyTableBody').innerHTML = claims.map(d => {
                 let rowColor = d.claimStatus === 'Under Review' ? 'background:#fff8e1;' : ''; 
-                let isEditing = editingSafetyRows.includes(d.orderId);
+                let isEditing = editingSafetyRows.includes(d.uid);
                 let contentHtml = '';
 
                 if (d.claimStatus === 'Approved' && !isEditing) {
@@ -1120,40 +1102,40 @@
                         </td>
                         <td>
                             <span style="font-weight:bold; color:green;">Approved</span><br>
-                            <button onclick="editSafetyRow('${d.orderId}')" class="edit-btn" style="margin-top:10px;">Edit</button>
+                            <button onclick="editSafetyRow('${d.uid}')" class="edit-btn" style="margin-top:10px;">Edit</button>
                         </td>
                     `;
                 } else {
                     let hideActions = (d.conditionLog === 'Saleable' && !d.claimId) ? 'display:none;' : '';
                     contentHtml = `
                         <td>
-                            <input type="text" id="cid-${d.orderId}" placeholder="Claim ID" value="${d.claimId}" style="width:120px; margin-bottom:5px;" onkeyup="toggleSafetySave('${d.orderId}', '${d.conditionLog}')"><br>
-                            <input type="date" id="cdate-${d.orderId}" value="${d.claimDate}" onchange="toggleSafetySave('${d.orderId}', '${d.conditionLog}')">
+                            <input type="text" id="cid-${d.uid}" placeholder="Claim ID" value="${d.claimId}" style="width:120px; margin-bottom:5px;" onkeyup="toggleSafetySave('${d.uid}', '${d.conditionLog}')"><br>
+                            <input type="date" id="cdate-${d.uid}" value="${d.claimDate}" onchange="toggleSafetySave('${d.uid}', '${d.conditionLog}')">
                         </td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             <div style="display:flex; align-items:center; gap:5px;">
-                                Amt: <input type="number" id="amt-${d.orderId}" placeholder="Amt" value="${d.amtRec}" onkeyup="calcSafety(this)" style="width:60px;">
-                                Qty: <input type="number" id="cqty-${d.orderId}" placeholder="Qty" value="${d.recQty}" style="width:40px;">
+                                Amt: <input type="number" id="amt-${d.uid}" placeholder="Amt" value="${d.amtRec}" onkeyup="calcSafety(this)" style="width:60px;">
+                                Qty: <input type="number" id="cqty-${d.uid}" placeholder="Qty" value="${d.recQty}" style="width:40px;">
                             </div>
                             <div class="calc-alert" style="color:red; font-weight:bold; font-size:11px; margin-top:2px;"></div>
                         </td>
                         <td>
-                            <select id="cstatus-${d.orderId}" style="margin-bottom:5px; width:100%; padding:4px;">
+                            <select id="cstatus-${d.uid}" style="margin-bottom:5px; width:100%; padding:4px;">
                                 <option value="None" ${d.claimStatus==='None'?'selected':''}>None</option>
                                 <option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option>
                                 <option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Under Review</option>
                                 <option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option>
                             </select><br>
-                            <div id="safety-actions-${d.orderId}" style="${hideActions}">
-                                <button onclick="saveClaim('${d.orderId}')" class="save-btn">Save</button>
-                                <button onclick="cancelSafetyRow('${d.orderId}')" class="cancel-btn">Cancel</button>
+                            <div id="safety-actions-${d.uid}" style="${hideActions}">
+                                <button onclick="saveClaim('${d.uid}')" class="save-btn">Save</button>
+                                <button onclick="cancelSafetyRow('${d.uid}')" class="cancel-btn">Cancel</button>
                             </div>
                         </td>
                     `;
                 }
 
-                return `<tr id="safety-row-${d.orderId}" style="${rowColor}">
+                return `<tr id="safety-row-${d.uid}" style="${rowColor}">
                     <td>${d.delDate}</td>
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
@@ -1165,14 +1147,14 @@
             filterSafety();
         }
 
-        function toggleSafetySave(oid, cond) {
+        function toggleSafetySave(uid, cond) {
             if (cond === 'Saleable') {
-                const cidVal = document.getElementById('cid-'+oid).value.trim();
-                document.getElementById('safety-actions-'+oid).style.display = cidVal ? 'block' : 'none';
+                const cidVal = document.getElementById('cid-'+uid).value.trim();
+                document.getElementById('safety-actions-'+uid).style.display = cidVal ? 'block' : 'none';
             }
         }
-        function editSafetyRow(oid) { editingSafetyRows.push(oid); renderSafetyTable(); }
-        function cancelSafetyRow(oid) { editingSafetyRows = editingSafetyRows.filter(id => id !== oid); renderSafetyTable(); }
+        function editSafetyRow(uid) { editingSafetyRows.push(uid); renderSafetyTable(); }
+        function cancelSafetyRow(uid) { editingSafetyRows = editingSafetyRows.filter(id => id !== uid); renderSafetyTable(); }
 
         function filterSafety() {
             const dateType = document.getElementById("safetyDateType").value;
@@ -1198,8 +1180,8 @@
 
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
-                const oid = row.id.replace('safety-row-', '');
-                const d = reportData.find(item => item.orderId === oid);
+                const uid = row.id.replace('safety-row-', '');
+                const d = reportData.find(item => item.uid === uid);
                 if (!d) continue;
 
                 let mDate = true;
@@ -1211,21 +1193,21 @@
                 }
                 let mCond = condFilter === "" || d.conditionLog.toUpperCase().includes(condFilter);
                 
-                const dynamicStatus = document.getElementById(`cstatus-${oid}`);
+                const dynamicStatus = document.getElementById(`cstatus-${uid}`);
                 const currentStatus = dynamicStatus ? dynamicStatus.value.toUpperCase() : d.claimStatus.toUpperCase();
                 let mStatus = statusFilter === "" || currentStatus.includes(statusFilter);
 
                 let vSearch = (d[searchType]||"").toString().toUpperCase();
                 let mSearch = searchVals.length === 0 || searchVals.includes(vSearch);
 
-                const dynCid = document.getElementById(`cid-${oid}`);
-                const dynCDate = document.getElementById(`cdate-${oid}`);
+                const dynCid = document.getElementById(`cid-${uid}`);
+                const dynCDate = document.getElementById(`cdate-${uid}`);
                 let vClaim = claimType === 'claimId' ? (dynCid ? dynCid.value : (d.claimId||"")) : (dynCDate ? dynCDate.value : (d.claimDate||""));
                 vClaim = vClaim.toString().toUpperCase();
                 let mClaim = claimVals.length === 0 || claimVals.includes(vClaim);
 
-                const dynAmt = document.getElementById(`amt-${oid}`);
-                const dynQty = document.getElementById(`cqty-${oid}`);
+                const dynAmt = document.getElementById(`amt-${uid}`);
+                const dynQty = document.getElementById(`cqty-${uid}`);
                 let vVal = (d[valType]||"").toString().toUpperCase();
                 if (valType === 'amtRec' && dynAmt) vVal = dynAmt.value.toUpperCase();
                 if (valType === 'recQty' && dynQty) vVal = dynQty.value.toUpperCase();
@@ -1256,13 +1238,13 @@
             else alertSpan.innerHTML = "";
         }
 
-        function saveClaim(oid) {
-            const item = reportData.find(d => d.orderId === oid);
-            const cid = document.getElementById(`cid-${oid}`).value.trim();
-            const cdate = document.getElementById(`cdate-${oid}`).value;
-            const amt = document.getElementById(`amt-${oid}`).value;
-            const cqty = document.getElementById(`cqty-${oid}`).value;
-            let cstatus = document.getElementById(`cstatus-${oid}`).value;
+        function saveClaim(uid) {
+            const item = reportData.find(d => d.uid === uid);
+            const cid = document.getElementById(`cid-${uid}`).value.trim();
+            const cdate = document.getElementById(`cdate-${uid}`).value;
+            const amt = document.getElementById(`amt-${uid}`).value;
+            const cqty = document.getElementById(`cqty-${uid}`).value;
+            let cstatus = document.getElementById(`cstatus-${uid}`).value;
 
             if (item.conditionLog === 'Saleable' && cid !== '') {
                 item.conditionLog = 'Fake';
@@ -1275,7 +1257,7 @@
             item.claimId = cid; item.claimDate = cdate; item.amtRec = amt; item.recQty = cqty; item.claimStatus = cstatus;
 
             saveData(); 
-            editingSafetyRows = editingSafetyRows.filter(id => id !== oid);
+            editingSafetyRows = editingSafetyRows.filter(id => id !== uid);
             renderSafetyTable(); 
             updateStats();
         }
@@ -1303,12 +1285,10 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE (MERGED LOGIC)
+        // 6. MASTER FILE (FRONTEND GROUPING)
         // ==============================================
         function renderMasterTable() {
-            orderIdCounts = {};
-            reportData.forEach(d => orderIdCounts[d.orderId] = (orderIdCounts[d.orderId] || 0) + 1);
-
+            // Group the data specifically for the frontend UI display
             const groupedData = {};
             reportData.forEach(d => {
                 if(!groupedData[d.orderId]) groupedData[d.orderId] = [];
@@ -1323,18 +1303,30 @@
         function getMasterRowHTML(items, isEditing) {
             const oid = items[0].orderId;
             const isMultiple = items.length > 1;
+            
+            // Highlight multiple tracking rows
             let dupHtml = isMultiple ? `background-color:#fff3cd; border-left:4px solid #ffc107;` : ``;
             let dupWarn = isMultiple ? `<br><span style="color:#d39e00; font-size:10px; font-weight:bold;">⚠️ MULTIPLE TRACKINGS</span>` : ``;
 
-            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
-            let datesHtml = items.map(d => `<div style="padding:4px 0;">Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.trackingId}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.trackingId}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            // Stack details with horizontal lines for multi-item orders
+            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}<br><b>SKU:</b> ${d.sku}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${d.orderDate||'-'}<br>Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let valQtyHtml = items.map(d => `<div style="padding:4px 0;">Val: <b>${d.oAmt}</b><br>Exp Qty: ${d.oQty}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             
             let statCondHtml = items.map(d => {
                 if(isEditing) {
                     return `<div style="padding:4px 0;">
-                        <select id="em-status-${d.trackingId}" class="master-input" style="width:100px;"><option value="In Transit" ${d.status==='In Transit'?'selected':''}>In Transit</option><option value="Pending Scan" ${d.status==='Pending Scan'?'selected':''}>Pending Scan</option><option value="Received" ${d.status==='Received'?'selected':''}>Received</option><option value="Lost" ${d.status==='Lost'?'selected':''}>Lost</option></select><br>
-                        <select id="em-cond-${d.trackingId}" class="master-input" style="width:100px;"><option value="">-Cond-</option><option value="Saleable" ${d.conditionLog==='Saleable'?'selected':''}>Saleable</option><option value="Damaged" ${d.conditionLog==='Damaged'?'selected':''}>Damaged</option><option value="Different" ${d.conditionLog==='Different'?'selected':''}>Different</option><option value="Missing Quantity" ${d.conditionLog==='Missing Quantity'?'selected':''}>Missing Qty</option><option value="Lost" ${d.conditionLog==='Lost'?'selected':''}>Lost</option><option value="Fake" ${d.conditionLog==='Fake'?'selected':''}>Fake</option></select>
+                        <select id="em-status-${d.uid}" class="master-input" style="width:100px;"><option value="In Transit" ${d.status==='In Transit'?'selected':''}>In Transit</option><option value="Pending Scan" ${d.status==='Pending Scan'?'selected':''}>Pending Scan</option><option value="Received" ${d.status==='Received'?'selected':''}>Received</option><option value="Lost" ${d.status==='Lost'?'selected':''}>Lost</option></select><br>
+                        <select id="em-cond-${d.uid}" class="master-input" style="width:100px;">
+                            <option value="">-Cond-</option>
+                            <option value="Saleable" ${d.conditionLog==='Saleable'?'selected':''}>Saleable</option>
+                            <option value="Damaged" ${d.conditionLog==='Damaged'?'selected':''}>Damaged</option>
+                            <option value="Different" ${d.conditionLog==='Different'?'selected':''}>Different</option>
+                            <option value="Missing Quantity" ${d.conditionLog==='Missing Quantity'?'selected':''}>Missing Qty</option>
+                            <option value="Lost" ${d.conditionLog==='Lost'?'selected':''}>Lost</option>
+                            <option value="Fake" ${d.conditionLog==='Fake'?'selected':''}>Fake</option>
+                            <option value="Return Cancelled" ${d.conditionLog==='Return Cancelled'?'selected':''}>Return Cancelled</option>
+                        </select>
                     </div>`;
                 } else {
                     return `<div style="padding:4px 0;"><span style="font-weight:bold;">${d.status}</span><br>${d.conditionLog||'-'}</div>`;
@@ -1343,7 +1335,7 @@
 
             let recAmtHtml = items.map(d => {
                 if(isEditing) {
-                    return `<div style="padding:4px 0;">Qty: <input type="number" id="em-qty-${d.trackingId}" value="${d.recQty}" style="width:40px;"><br>Amt: <input type="number" id="em-amt-${d.trackingId}" value="${d.amtRec}" style="width:40px; margin-top:2px;"></div>`;
+                    return `<div style="padding:4px 0;">Qty: <input type="number" id="em-qty-${d.uid}" value="${d.recQty}" style="width:40px;"><br>Amt: <input type="number" id="em-amt-${d.uid}" value="${d.amtRec}" style="width:40px; margin-top:2px;"></div>`;
                 } else {
                     return `<div style="padding:4px 0;">Qty: ${d.recQty||'0'}<br>Amt: ${d.amtRec||'-'}</div>`;
                 }
@@ -1351,7 +1343,7 @@
             
             let cStatusHtml = items.map(d => {
                  if(isEditing) {
-                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.trackingId}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option></select></div>`;
+                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.uid}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option></select></div>`;
                 } else {
                     return `<div style="padding:4px 0;"><b>${d.claimStatus||'None'}</b></div>`;
                 }
@@ -1360,7 +1352,8 @@
             return `
                 <tr id="master-row-${oid}">
                     <td style="text-align: center; vertical-align:middle;"><input type="checkbox" class="export-checkbox" value="${oid}"></td>
-                    <td style="${dupHtml} vertical-align:top;"><b>${oid}</b>${dupWarn}<br><br>${trackAsinHtml}</td>
+                    <td style="${dupHtml} vertical-align:top;"><b>${oid}</b>${dupWarn}</td>
+                    <td style="font-size:12px; vertical-align:top;">${trackAsinHtml}</td>
                     <td style="font-size:12px; vertical-align:top;">${datesHtml}</td>
                     <td style="font-size:12px; vertical-align:top;">${valQtyHtml}</td>
                     <td style="vertical-align:top;">${statCondHtml}</td>
@@ -1389,20 +1382,20 @@
         function saveMasterRow(oid) {
             const items = reportData.filter(d => d.orderId === oid);
             items.forEach(item => {
-                const tid = item.trackingId;
-                let newStatus = document.getElementById(`em-status-${tid}`).value;
-                let newCond = document.getElementById(`em-cond-${tid}`).value;
-                let newClaim = document.getElementById(`em-cstatus-${tid}`).value;
-                let newCid = document.getElementById(`em-cid-${tid}`).value.trim();
+                const uid = item.uid;
+                let newStatus = document.getElementById(`em-status-${uid}`).value;
+                let newCond = document.getElementById(`em-cond-${uid}`).value;
+                let newClaim = document.getElementById(`em-cstatus-${uid}`).value;
+                let newCid = document.getElementById(`em-cid-${uid}`).value.trim();
 
                 if (newCond === 'Saleable' && newCid !== '') {
                     newCond = 'Fake';
-                    alert(`Condition for ${tid} auto-updated to 'Fake' because a claim ID was provided for a Saleable item.`);
+                    alert(`Condition for tracking ${item.trackingId} auto-updated to 'Fake' because a claim ID was provided for a Saleable item.`);
                 }
 
                 item.claimId = newCid; item.status = newStatus; item.conditionLog = newCond; 
-                item.claimStatus = newClaim; item.recQty = document.getElementById(`em-qty-${tid}`).value; 
-                item.amtRec = document.getElementById(`em-amt-${tid}`).value; item.claimDate = document.getElementById(`em-cdate-${tid}`).value;
+                item.claimStatus = newClaim; item.recQty = document.getElementById(`em-qty-${uid}`).value; 
+                item.amtRec = document.getElementById(`em-amt-${uid}`).value; item.claimDate = document.getElementById(`em-cdate-${uid}`).value;
             });
             
             saveData(); 
@@ -1441,6 +1434,7 @@
                 if(!oidBox) continue; 
                 
                 const oid = oidBox.value;
+                // Get all grouped items for filtering
                 const items = reportData.filter(item => item.orderId === oid);
 
                 let mDate = items.some(d => {
@@ -1455,17 +1449,17 @@
                 });
 
                 let mStatus = items.some(d => {
-                    const el = document.getElementById(`em-status-${d.trackingId}`);
+                    const el = document.getElementById(`em-status-${d.uid}`);
                     return (el ? el.value : d.status).toUpperCase().includes(statusFilter);
                 }) || statusFilter === "";
 
                 let mCond = items.some(d => {
-                    const el = document.getElementById(`em-cond-${d.trackingId}`);
+                    const el = document.getElementById(`em-cond-${d.uid}`);
                     return (el ? el.value : d.conditionLog).toUpperCase().includes(condFilter);
                 }) || condFilter === "";
 
                 let mClaim = items.some(d => {
-                    const el = document.getElementById(`em-cstatus-${d.trackingId}`);
+                    const el = document.getElementById(`em-cstatus-${d.uid}`);
                     return (el ? el.value : d.claimStatus).toUpperCase().includes(claimFilter);
                 }) || claimFilter === "";
 
@@ -1473,7 +1467,7 @@
                 let mVal = valVals.length === 0 || items.some(d => valVals.includes((d[valType]||"").toString().toUpperCase()));
                 
                 let mRec = recVals.length === 0 || items.some(d => {
-                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.trackingId}`);
+                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.uid}`);
                     const v = el ? el.value : d[recType];
                     return recVals.includes((v||"").toString().toUpperCase());
                 });
@@ -1485,7 +1479,7 @@
                 if(mOther && mVal && mRec) items.forEach(d => aSearch.add(d[searchType]));
                 if(mOther && mSearch && mRec) items.forEach(d => aVal.add(d[valType]));
                 if(mOther && mSearch && mVal) items.forEach(d => {
-                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.trackingId}`);
+                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.uid}`);
                     aRec.add(el ? el.value : d[recType]);
                 });
             }
@@ -1507,21 +1501,26 @@
             }
         }
 
+        // ==============================================
+        // SEQUENTIAL EXPORT LOGIC
+        // ==============================================
         function exportMasterExcel() {
             const checkboxes = document.querySelectorAll('.export-checkbox:checked');
+            if (checkboxes.length === 0) return alert("Please select at least one order to export.");
+
+            const selectedOids = Array.from(checkboxes).map(cb => cb.value);
             
-            if (checkboxes.length === 0) {
-                return alert("Please select at least one order to export.");
-            }
+            // Extract the individual rows for the export file
+            let dataToExport = reportData.filter(d => selectedOids.includes(d.orderId));
 
-            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
-            const dataToExport = reportData.filter(d => selectedIds.includes(d.orderId));
+            // CRITICAL FIX: Sort by Order ID so multi-item orders are written below each other sequentially
+            dataToExport.sort((a, b) => a.orderId.localeCompare(b.orderId));
 
-            let csv = "Order ID,Tracking ID,ASIN,SKU,Req Date,Delivery Date,Amz Reason,Value,Exp Qty,Rec Qty,Base Status,Condition,Claim Status,Claim ID,Claim Date,Amount Received\n";
+            let csv = "Order ID,Order Date,Tracking ID,ASIN,SKU,Req Date,Delivery Date,Amz Reason,Value,Exp Qty,Rec Qty,Base Status,Condition,Claim Status,Claim ID,Claim Date,Amount Received\n";
             
             dataToExport.forEach(d => {
                 const safeReason = (d.amzReason || "").replace(/,/g, " ");
-                csv += `"${d.orderId}","${d.trackingId}","${d.asin}","${d.sku}","${d.reqDate}","${d.delDate||''}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${d.claimDate||''}","${d.amtRec||''}"\n`;
+                csv += `"${d.orderId}","${d.orderDate||''}","${d.trackingId}","${d.asin}","${d.sku}","${d.reqDate}","${d.delDate||''}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${d.claimDate||''}","${d.amtRec||''}"\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1544,13 +1543,10 @@
                 let c = text[i];
                 if (inQuote) {
                     if (c === '"') {
-                        if (text[i + 1] === '"') { col += '"'; i++; } 
-                        else { inQuote = false; }
+                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
                     } else { col += c; }
                 } else {
-                    if (c === '"') { inQuote = true; }
-                    else if (c === ',') { ret.push(col.trim()); col = ""; }
-                    else { col += c; }
+                    if (c === '"') { inQuote = true; } else if (c === ',') { ret.push(col.trim()); col = ""; } else { col += c; }
                 }
             }
             ret.push(col.trim());
@@ -1572,32 +1568,32 @@
                     
                     const cols = parseCSVLine(line);
                     
-                    if(cols.length >= 16) {
-                        const oid = cols[0];
-                        const tid = cols[1];
+                    if(cols.length >= 17) {
+                        const oid = cols[0].replace(/^"|"$/g, '').trim();
+                        if (oid === 'Order ID') continue; 
                         
-                        const recQty = cols[9];
-                        const status = cols[10];
-                        const cond = cols[11];
-                        const cStatus = cols[12];
-                        const cid = cols[13];
-                        const cdate = cols[14];
-                        const amtRec = cols[15];
+                        const tid = cols[2].replace(/^"|"$/g, '').trim();
+                        const sku = cols[4].replace(/^"|"$/g, '').trim();
+                        
+                        const recQty = cols[10].replace(/^"|"$/g, '').trim();
+                        const status = cols[11].replace(/^"|"$/g, '').trim();
+                        const cond = cols[12].replace(/^"|"$/g, '').trim();
+                        const cStatus = cols[13].replace(/^"|"$/g, '').trim();
+                        const cid = cols[14].replace(/^"|"$/g, '').trim();
+                        const cdate = cols[15].replace(/^"|"$/g, '').trim();
+                        const amtRec = cols[16].replace(/^"|"$/g, '').trim();
 
-                        let item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
+                        let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
+                        if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
+
                         if(item) {
-                            item.recQty = recQty;
-                            item.status = status;
-                            item.conditionLog = cond;
-                            item.claimStatus = cStatus;
-                            item.claimId = cid;
-                            item.claimDate = cdate;
+                            item.recQty = recQty; item.status = status; item.conditionLog = cond;
+                            item.claimStatus = cStatus; item.claimId = cid; item.claimDate = cdate;
                             item.amtRec = amtRec;
                             
                             if (item.conditionLog === 'Saleable' && item.claimId !== '') {
                                 item.conditionLog = 'Fake';
                             }
-                            
                             updatedCount++;
                         }
                     }
@@ -1606,9 +1602,7 @@
                 saveData(); 
                 updateStats();
                 renderMasterTable();
-                if(document.getElementById('safety').classList.contains('active')) {
-                    renderSafetyTable();
-                }
+                if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
                 
                 alert(`Bulk update successful! ${updatedCount} records updated.`);
                 event.target.value = ''; 
