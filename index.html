@@ -218,7 +218,14 @@
                     <thead>
                         <tr style="background: #f8f9fa;">
                             <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Del. Date</div>
+                                <div style="margin-bottom:4px;">Dates</div>
+                                <select id="safetyDateTarget" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0; margin-bottom:4px;">
+                                    <option value="allTargets">All Date Types</option>
+                                    <option value="reqDate">Req Date</option>
+                                    <option value="orderDate">Order Date</option>
+                                    <option value="delDate" selected>Del Date</option>
+                                    <option value="claimDate">Claim Date</option>
+                                </select>
                                 <select id="safetyDateType" class="filter-input safety-filter" onchange="toggleSafetyDateFilter(); filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="all">All Dates</option>
                                     <option value="exact">Exact Date</option>
@@ -371,6 +378,7 @@
                             <th style="width:150px; vertical-align: top;">
                                 <div style="margin-bottom:4px;">Dates</div>
                                 <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; margin-bottom:4px;">
+                                    <option value="allTargets">All Date Types</option>
                                     <option value="reqDate">Req Date</option>
                                     <option value="orderDate">Order Date</option>
                                     <option value="delDate">Del Date</option>
@@ -593,21 +601,16 @@
                 setCloudStatus('syncing'); 
                 try {
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-                    
-                    // CRITICAL FIX: Safe Batching for >500 items
                     const chunkSize = 400;
                     for (let i = 0; i < reportData.length; i += chunkSize) {
                         const chunk = reportData.slice(i, i + chunkSize);
                         const batch = db.batch();
-                        
                         chunk.forEach(item => {
                             const docRef = collectionRef.doc(item.uid);
                             batch.set(docRef, item, { merge: true }); 
                         });
-                        
                         await batch.commit();
                     }
-                    
                     setCloudStatus(navigator.onLine ? 'online' : 'offline');
                 } catch (e) {
                     console.error("Error saving to Firebase:", e);
@@ -658,16 +661,12 @@
                 try {
                     setCloudStatus('syncing');
                     const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
-                    
-                    // CRITICAL FIX: Delete chunking to prevent Firebase 500-limit crashes
                     const docs = snapshot.docs;
                     const chunkSize = 400;
                     for (let i = 0; i < docs.length; i += chunkSize) {
                         const chunk = docs.slice(i, i + chunkSize);
                         const batch = db.batch();
-                        chunk.forEach((doc) => {
-                            batch.delete(doc.ref);
-                        });
+                        chunk.forEach((doc) => { batch.delete(doc.ref); });
                         await batch.commit();
                     }
                     
@@ -938,24 +937,21 @@
                             oAmt: amt,
                             oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1",
                             status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
-                            claimId: '', claimDate: '', amtRec: ''
+                            claimId: '', claimDate: '', amtRec: '', delDate: ''
                         });
                     });
 
                     if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
 
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-                    
                     const chunkSize = 400; 
                     for (let i = 0; i < validRecords.length; i += chunkSize) {
                         const chunk = validRecords.slice(i, i + chunkSize);
                         const batch = db.batch();
-
                         chunk.forEach(item => {
                             const docRef = collectionRef.doc(item.uid);
                             batch.set(docRef, item, { merge: true }); 
                         });
-
                         await batch.commit();
                     }
                     
@@ -1125,7 +1121,6 @@
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
                 if (d.conditionLog === 'Return Cancelled') return false; 
-                
                 if (d.delDate) {
                     let dDate = new Date(d.delDate);
                     dDate.setHours(0, 0, 0, 0);
@@ -1191,7 +1186,7 @@
                 }
 
                 return `<tr id="safety-row-${d.uid}" style="${rowColor}">
-                    <td>${d.delDate}</td>
+                    <td>${d.delDate||'-'}</td>
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
                     ${contentHtml}
@@ -1212,6 +1207,7 @@
         function cancelSafetyRow(uid) { editingSafetyRows = editingSafetyRows.filter(id => id !== uid); renderSafetyTable(); }
 
         function filterSafety() {
+            const dateTarget = document.getElementById("safetyDateTarget").value;
             const dateType = document.getElementById("safetyDateType").value;
             const dateExact = document.getElementById("safetyDateExact").value;
             const dateStart = document.getElementById("safetyDateStart").value;
@@ -1219,19 +1215,17 @@
             
             const searchType = document.getElementById("safetySearchType").value;
             const searchVals = getMSSelected("ms-opt-safetySearch");
-
             const claimType = document.getElementById("safetyClaimSearchType").value;
             const claimVals = getMSSelected("ms-opt-safetyClaimSearch");
-
             const valType = document.getElementById("safetyValType").value;
             const valVals = getMSSelected("ms-opt-safetyValSearch");
-
             const condFilter = document.getElementById("safetyCond").value.toUpperCase();
             const statusFilter = document.getElementById("safetyStatus").value.toUpperCase();
 
             const tr = document.getElementById("safetyTableBody").getElementsByTagName("tr");
-
             let aSearch = new Set(), aClaim = new Set(), aVal = new Set();
+            
+            let targetsToCheck = dateTarget === 'allTargets' ? ['reqDate', 'orderDate', 'delDate', 'claimDate'] : [dateTarget];
 
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
@@ -1239,13 +1233,27 @@
                 const d = reportData.find(item => item.uid === uid);
                 if (!d) continue;
 
-                let mDate = true;
-                if (dateType === 'exact' && dateExact) mDate = (d.delDate === dateExact);
-                else if (dateType === 'range') {
-                    if (dateStart && dateEnd) mDate = (d.delDate >= dateStart && d.delDate <= dateEnd);
-                    else if (dateStart) mDate = (d.delDate >= dateStart);
-                    else if (dateEnd) mDate = (d.delDate <= dateEnd);
+                let mDate = false;
+                if (dateType === 'all') {
+                    if (dateTarget === 'allTargets') {
+                        mDate = true;
+                    } else {
+                        mDate = d[dateTarget] && d[dateTarget].trim() !== '';
+                    }
+                } else {
+                    mDate = targetsToCheck.some(tgt => {
+                        const dVal = d[tgt] || "";
+                        if (!dVal) return false;
+                        if (dateType === 'exact' && dateExact) return (dVal === dateExact);
+                        if (dateType === 'range') {
+                            if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
+                            if (dateStart) return (dVal >= dateStart);
+                            if (dateEnd) return (dVal <= dateEnd);
+                        }
+                        return true;
+                    });
                 }
+
                 let mCond = condFilter === "" || d.conditionLog.toUpperCase().includes(condFilter);
                 
                 const dynamicStatus = document.getElementById(`cstatus-${uid}`);
@@ -1340,7 +1348,7 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE (FRONTEND GROUPING)
+        // 6. MASTER FILE 
         // ==============================================
         function renderMasterTable() {
             const groupedData = {};
@@ -1481,6 +1489,8 @@
             const tr = document.getElementById("masterTableBody").getElementsByTagName("tr");
 
             let aOrderId = new Set(), aItemSearch = new Set(), aVal = new Set(), aRec = new Set();
+            
+            let targetsToCheck = dateTarget === 'allTargets' ? ['reqDate', 'orderDate', 'delDate', 'claimDate'] : [dateTarget];
 
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
@@ -1493,14 +1503,22 @@
                 let mOrderId = orderVals.length === 0 || orderVals.includes(oid.toUpperCase());
 
                 let mDate = items.some(d => {
-                    const dVal = d[dateTarget] || "";
-                    if (dateType === 'exact' && dateExact) return (dVal === dateExact);
-                    if (dateType === 'range') {
-                        if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
-                        if (dateStart) return (dVal >= dateStart);
-                        if (dateEnd) return (dVal <= dateEnd);
+                    if (dateType === 'all') {
+                        if (dateTarget === 'allTargets') return true;
+                        return d[dateTarget] && d[dateTarget].trim() !== '';
+                    } else {
+                        return targetsToCheck.some(tgt => {
+                            const dVal = d[tgt] || "";
+                            if (!dVal) return false;
+                            if (dateType === 'exact' && dateExact) return (dVal === dateExact);
+                            if (dateType === 'range') {
+                                if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
+                                if (dateStart) return (dVal >= dateStart);
+                                if (dateEnd) return (dVal <= dateEnd);
+                            }
+                            return true;
+                        });
                     }
-                    return true;
                 });
 
                 let mStatus = items.some(d => {
@@ -1626,6 +1644,7 @@
                         const tid = cols[2].replace(/^"|"$/g, '').trim();
                         const sku = cols[4].replace(/^"|"$/g, '').trim();
                         
+                        const delDate = cols[6].replace(/^"|"$/g, '').trim(); 
                         const recQty = cols[10].replace(/^"|"$/g, '').trim();
                         const status = cols[11].replace(/^"|"$/g, '').trim();
                         const cond = cols[12].replace(/^"|"$/g, '').trim();
@@ -1638,6 +1657,7 @@
                         if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
 
                         if(item) {
+                            item.delDate = delDate; 
                             item.recQty = recQty; item.status = status; item.conditionLog = cond;
                             item.claimStatus = cStatus; item.claimId = cid; item.claimDate = cdate;
                             item.amtRec = amtRec;
