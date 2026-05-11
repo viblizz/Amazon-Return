@@ -1637,30 +1637,40 @@
                     
                     const cols = parseCSVLine(line);
                     
-                    if(cols.length >= 17) {
-                        const oid = cols[0].replace(/^"|"$/g, '').trim();
-                        if (oid === 'Order ID') continue; 
+                    // Relaxed column check to allow for Excel stripping trailing empty cells
+                    if(cols.length >= 7) { 
+                        // Helper to safely get columns without breaking if they are missing
+                        const safeGet = (index) => cols.length > index ? cols[index].replace(/^"|"$/g, '').trim() : '';
+
+                        const oid = safeGet(0);
+                        if (!oid || oid === 'Order ID') continue; 
                         
-                        const tid = cols[2].replace(/^"|"$/g, '').trim();
-                        const sku = cols[4].replace(/^"|"$/g, '').trim();
+                        const tid = safeGet(2);
+                        const sku = safeGet(4);
                         
-                        const delDate = cols[6].replace(/^"|"$/g, '').trim(); 
-                        const recQty = cols[10].replace(/^"|"$/g, '').trim();
-                        const status = cols[11].replace(/^"|"$/g, '').trim();
-                        const cond = cols[12].replace(/^"|"$/g, '').trim();
-                        const cStatus = cols[13].replace(/^"|"$/g, '').trim();
-                        const cid = cols[14].replace(/^"|"$/g, '').trim();
-                        const cdate = cols[15].replace(/^"|"$/g, '').trim();
-                        const amtRec = cols[16].replace(/^"|"$/g, '').trim();
+                        const delDate = safeGet(6);
+                        const recQty = safeGet(10);
+                        const status = safeGet(11);
+                        const cond = safeGet(12);
+                        const cStatus = safeGet(13);
+                        const cid = safeGet(14);
+                        const cdate = safeGet(15);
+                        const amtRec = safeGet(16);
 
                         let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
                         if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
 
                         if(item) {
                             item.delDate = delDate; 
-                            item.recQty = recQty; item.status = status; item.conditionLog = cond;
-                            item.claimStatus = cStatus; item.claimId = cid; item.claimDate = cdate;
-                            item.amtRec = amtRec;
+                            
+                            // Only overwrite the later columns if Excel didn't truncate them out
+                            if (cols.length > 10) item.recQty = recQty; 
+                            if (cols.length > 11) item.status = status; 
+                            if (cols.length > 12) item.conditionLog = cond;
+                            if (cols.length > 13) item.claimStatus = cStatus; 
+                            if (cols.length > 14) item.claimId = cid; 
+                            if (cols.length > 15) item.claimDate = cdate;
+                            if (cols.length > 16) item.amtRec = amtRec;
                             
                             if (item.conditionLog === 'Saleable' && item.claimId !== '') {
                                 item.conditionLog = 'Fake';
