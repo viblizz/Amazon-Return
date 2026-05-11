@@ -1334,7 +1334,7 @@
             reportData.forEach(d => {
                 if(d.reqDate) {
                     const diff = Math.ceil((new Date() - new Date(d.reqDate)) / (1000*60*60*24));
-                    if(diff > 50) {
+                    if(diff > 50 && (d.status === 'In Transit' || d.status === 'Pending Scan')) {
                         body.innerHTML += `<tr>
                             <td>${d.reqDate}</td>
                             <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
