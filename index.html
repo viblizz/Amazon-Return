@@ -23,7 +23,7 @@
 
         .dashboard-layout { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
         .sidebar { background: #202124; color: white; padding: 25px; display: flex; flex-direction: column; }
-        .sidebar h2 { color: #8ab4f8; margin-bottom: 20px; border-bottom: 1px solid #3c4043; padding-bottom: 10px; }
+        .sidebar h2 { color: #8ab4f8; margin-bottom: 40px; border-bottom: 1px solid #3c4043; padding-bottom: 10px; }
         .nav-btn { background: none; border: none; color: #bdc1c6; padding: 15px; text-align: left; cursor: pointer; font-size: 16px; border-radius: 8px; margin-bottom: 5px; }
         .nav-btn.active { background: #3c4043; color: white; }
         .nav-btn:hover:not(.active) { background: #303134; }
@@ -52,6 +52,7 @@
         .scan-locked { background-color: #fce8e6; border-color: #d93025 !important; cursor: not-allowed; }
         .active-scan-row { border: 2px solid #1a73e8 !important; background-color: #e8f0fe !important; }
 
+        /* ADVANCED STATS DASHBOARD */
         .stats-controls { display: flex; gap: 10px; align-items: center; background: #e8f0fe; padding: 10px 15px; border-radius: 8px 8px 0 0; border: 1px solid #c2e0ff; border-bottom: none; font-size: 13px; font-weight: bold; color: #174ea6; }
         .stats-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; background: #f8fbff; border: 1px solid #c2e0ff; border-radius: 0 0 8px 8px; padding: 15px; }
         .stat-card { background: white; border: 1px solid #dadce0; border-radius: 6px; padding: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -65,6 +66,7 @@
         .master-input { width: 100%; padding: 4px; border: 1px solid #dadce0; border-radius: 4px; background: white; font-size: 12px; margin-bottom: 4px; }
         .master-input:focus { border-color: #1a73e8; outline: none; }
 
+        /* MULTI-SELECT DROPDOWN STYLES */
         .ms-dropdown { position: relative; display: inline-block; width: 100%; }
         .ms-btn { width: 100%; padding: 6px; border: 1px solid #dadce0; border-radius: 4px; background: white; text-align: left; cursor: pointer; font-size: 12px; }
         .ms-btn::after { content: ' ▼'; float: right; font-size: 10px; margin-top: 2px; }
@@ -91,11 +93,6 @@
     <div id="dashboardScreen" class="dashboard-layout" style="display:none;">
         <div class="sidebar">
             <h2 id="currentWorkspaceTitle">Workspace</h2>
-            
-            <div id="cloudStatus" style="padding: 10px; margin-bottom: 25px; border-radius: 6px; background: #e8f5e9; color: #0f5132; font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #c3e6cb; transition: 0.3s;">
-                🟢 Cloud Connected
-            </div>
-
             <nav>
                 <button class="nav-btn" onclick="switchTab('counter', this)">📊 Counter</button>
                 <button class="nav-btn active" onclick="switchTab('ingestion', this)">1. Data Ingestion</button>
@@ -109,7 +106,7 @@
                 <input type="file" id="restoreFile" accept=".json" style="display:none;" onchange="restoreBackup(event)">
                 <button class="nav-btn" style="color: #34a853; margin-top: 5px;" onclick="exportBackup()">💾 Download Backup</button>
                 <button class="nav-btn" style="color: #fbbc04; margin-top: 5px;" onclick="document.getElementById('restoreFile').click()">📂 Restore Backup</button>
-                <button class="nav-btn" style="color: #d93025; margin-top: 5px;" onclick="clearCompanyData()">🗑️ Clear Cloud Data</button>
+                <button class="nav-btn" style="color: #d93025; margin-top: 5px;" onclick="clearCompanyData()">🗑️ Clear Saved Data</button>
             </nav>
             <div style="margin-top: auto;">
                 <button class="nav-btn" style="color: #f28b82;" onclick="location.reload()">← Switch Account</button>
@@ -136,7 +133,8 @@
                         <input type="date" id="statsEndDate" class="master-input" style="width:130px; margin:0;" onchange="updateStats()">
                     </span>
                 </div>
-                <div id="statsBar" class="stats-container"></div>
+                <div id="statsBar" class="stats-container">
+                    </div>
             </div>
 
             <div id="ingestion" class="tab-pane active">
@@ -144,21 +142,17 @@
                 <div class="upload-grid" style="grid-template-columns: 1fr;">
                     <div class="upload-box">
                         <h3>Upload Amazon Return Report (.tsv / .txt)</h3>
-                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Select your file, then click Upload to merge it safely into your All-Time Cloud Database.</p>
-                        
-                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center; margin-top: 15px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f8f9fa;">
-                            <input type="file" id="amazonReport" accept=".tsv,.txt" style="max-width: 250px;">
-                            <button class="action-btn" onclick="processAmazonReport()" style="background:#0F5132;">📤 Upload Data</button>
-                        </div>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Upload the master report first. POD matching happens in the Scanning tab.</p>
+                        <input type="file" id="amazonReport" accept=".tsv,.txt" onchange="processAmazonReport()">
                     </div>
                 </div>
                 
-                <h3 style="margin-top: 20px;">All-Time Cloud Data</h3>
+                <h3 style="margin-top: 20px;">Uploaded Report Data</h3>
                 <div style="max-height: 400px; overflow-y: auto;">
                     <table id="ingestionTable">
                         <thead>
                             <tr>
-                                <th>Order Date</th><th>Req. Date</th><th>Order ID</th><th>Tracking ID</th><th>ASIN</th><th>SKU</th><th>Amz Reason</th><th>Order Value</th><th>Order Qty</th>
+                                <th>Req. Date</th><th>Order ID</th><th>Tracking ID</th><th>ASIN</th><th>SKU</th><th>Amz Reason</th><th>Order Value</th><th>Order Qty</th>
                             </tr>
                         </thead>
                         <tbody id="ingestionTableBody"></tbody>
@@ -318,7 +312,7 @@
             <div id="master" class="tab-pane">
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 15px;">
                     <div>
-                        <h2>📋 All-Time Master Order File</h2>
+                        <h2>📋 Master Order File</h2>
                         <p style="font-size: 13px; color: #666;">Read-only summary. Use <b>Export to Edit</b> to download a template, update it in Excel, and upload it via <b>Upload Bulk Edit</b>.</p>
                     </div>
                     <div style="display:flex; gap:10px;">
@@ -331,61 +325,42 @@
                 <table id="masterFilterTable">
                     <thead>
                         <tr style="background: #e8f0fe;">
-                            <th style="text-align: center; vertical-align: top; width: 50px;">
-                                <input type="checkbox" id="selectAllMaster" onclick="toggleSelectAll()" style="margin-bottom:4px;"><br><span style="font-size:10px;">Select All</span>
+                            <th style="text-align: center; vertical-align: middle; width: 50px;">
+                                <input type="checkbox" id="selectAllMaster" onclick="toggleSelectAll()"><br><span style="font-size:10px;">Select All</span>
                             </th>
-                            
-                            <th style="width:160px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Order ID</div>
-                                <div class="ms-dropdown">
-                                    <div class="ms-btn" onclick="toggleMS('ms-masterOrderId')">Select Orders...</div>
-                                    <div class="ms-content" id="ms-masterOrderId">
-                                        <input type="text" class="ms-search" placeholder="Search..." onkeyup="filterMSLocal(this)">
-                                        <div class="ms-options" id="ms-opt-masterOrderId"></div>
-                                    </div>
-                                </div>
-                            </th>
-                            
-                            <th style="width:200px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Tracking / ASIN / SKU</div>
-                                <select id="masterItemSearchType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:200px;">Order / Track / ASIN<br>
+                                <select id="masterSearchType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
+                                    <option value="orderId">Order ID</option>
                                     <option value="trackingId">Tracking ID</option>
                                     <option value="asin">ASIN</option>
-                                    <option value="sku">SKU</option>
                                 </select>
                                 <div class="ms-dropdown">
-                                    <div class="ms-btn" onclick="toggleMS('ms-masterItemSearch')">Select Items...</div>
-                                    <div class="ms-content" id="ms-masterItemSearch">
+                                    <div class="ms-btn" onclick="toggleMS('ms-masterSearch')">Select Items...</div>
+                                    <div class="ms-content" id="ms-masterSearch">
                                         <input type="text" class="ms-search" placeholder="Search..." onkeyup="filterMSLocal(this)">
-                                        <div class="ms-options" id="ms-opt-masterItemSearch"></div>
+                                        <div class="ms-options" id="ms-opt-masterSearch"></div>
                                     </div>
                                 </div>
                             </th>
-                            
-                            <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Dates</div>
-                                <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; margin-bottom:4px;">
-                                    <option value="allTargets">All Date Types</option>
+                            <th style="width:150px;">Dates<br>
+                                <select id="masterDateTarget" class="filter-input master-filter" onchange="filterMaster()" style="margin-bottom:4px;">
                                     <option value="reqDate">Req Date</option>
-                                    <option value="orderDate">Order Date</option>
                                     <option value="delDate">Del Date</option>
                                     <option value="claimDate">Claim Date</option>
                                 </select>
-                                <select id="masterDateType" class="filter-input master-filter" onchange="toggleMasterDateFilter(); filterMaster();" style="margin-top:0; margin-bottom:4px;">
+                                <select id="masterDateType" class="filter-input master-filter" onchange="toggleMasterDateFilter(); filterMaster();" style="margin-bottom:4px;">
                                     <option value="all">All Dates</option>
                                     <option value="exact">Exact Date</option>
                                     <option value="range">Date Range</option>
                                 </select>
-                                <input type="date" id="masterDateExact" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; display:none;">
-                                <div id="masterDateRange" style="display:none; flex-direction:column; gap:4px; margin-top:0;">
-                                    <input type="date" id="masterDateStart" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
-                                    <input type="date" id="masterDateEnd" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
+                                <input type="date" id="masterDateExact" class="filter-input master-filter" onchange="filterMaster()" style="display:none;">
+                                <div id="masterDateRange" style="display:none; flex-direction:column; gap:2px;">
+                                    <input type="date" id="masterDateStart" class="filter-input master-filter" onchange="filterMaster()">
+                                    <input type="date" id="masterDateEnd" class="filter-input master-filter" onchange="filterMaster()">
                                 </div>
                             </th>
-                            
-                            <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Value & Exp Qty</div>
-                                <select id="masterValType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:150px;">Value & Exp Qty<br>
+                                <select id="masterValType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
                                     <option value="oAmt">Order Value</option>
                                     <option value="oQty">Exp Qty</option>
                                 </select>
@@ -397,10 +372,8 @@
                                     </div>
                                 </div>
                             </th>
-                            
-                            <th style="vertical-align: top;">
-                                <div style="margin-bottom:4px;">Status & Condition</div>
-                                <select id="masterStatus" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0; margin-bottom:4px;">
+                            <th>Status & Condition<br>
+                                <select id="masterStatus" class="filter-input master-filter" onchange="filterMaster()" style="margin-bottom: 2px; margin-top: 25px;">
                                     <option value="">All Statuses</option>
                                     <option value="In Transit">In Transit</option>
                                     <option value="Pending Scan">Pending Scan</option>
@@ -415,13 +388,10 @@
                                     <option value="Missing Quantity">Missing Quantity</option>
                                     <option value="Lost">Lost</option>
                                     <option value="Fake">Fake</option>
-                                    <option value="Return Cancelled">Return Cancelled</option>
                                 </select>
                             </th>
-                            
-                            <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Rec Qty & Amt</div>
-                                <select id="masterRecType" class="filter-input master-filter" onchange="filterMaster();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:150px;">Rec Qty & Amt<br>
+                                <select id="masterRecType" class="filter-input master-filter" onchange="filterMaster();" style="margin-bottom:4px;">
                                     <option value="recQty">Received Qty</option>
                                     <option value="amtRec">Amt Received</option>
                                 </select>
@@ -433,10 +403,8 @@
                                     </div>
                                 </div>
                             </th>
-                            
-                            <th style="vertical-align: top;">
-                                <div style="margin-bottom:4px;">Claim Status</div>
-                                <select id="masterClaim" class="filter-input master-filter" onchange="filterMaster()" style="margin-top:0;">
+                            <th>Claim Status<br>
+                                <select id="masterClaim" class="filter-input master-filter" onchange="filterMaster()" style="margin-top: 55px;">
                                     <option value="">All Claims</option>
                                     <option value="None">None</option>
                                     <option value="Pending Claim">Pending</option>
@@ -444,10 +412,7 @@
                                     <option value="Approved">Approved</option>
                                 </select>
                             </th>
-                            
-                            <th style="vertical-align: top;">
-                                <div style="margin-bottom:4px;">Actions</div>
-                            </th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="masterTableBody"></tbody>
@@ -473,7 +438,7 @@
         const db = firebase.firestore();
 
         // ==============================================
-        // APPLICATION LOGIC & VARIABLES
+        // APPLICATION LOGIC
         // ==============================================
         const DEFAULT_CO = [
             { name: "Miss World", color: "#E91E63" },
@@ -485,40 +450,9 @@
         let expectedDeliveries = []; 
         let scanTimer;
         let editingSafetyRows = []; 
+        let orderIdCounts = {}; 
         let currentCompany = ""; 
 
-        // ==============================================
-        // CLOUD CONNECTION STATUS LOGIC
-        // ==============================================
-        const statusEl = document.getElementById('cloudStatus');
-
-        function setCloudStatus(state) {
-            if (!statusEl) return;
-            if (state === 'online') {
-                statusEl.innerHTML = '🟢 Cloud Connected';
-                statusEl.style.background = '#e8f5e9';
-                statusEl.style.color = '#0f5132';
-                statusEl.style.borderColor = '#c3e6cb';
-            } else if (state === 'offline') {
-                statusEl.innerHTML = '🔴 Offline (Check Wi-Fi / Permissions)';
-                statusEl.style.background = '#fce8e6';
-                statusEl.style.color = '#d93025';
-                statusEl.style.borderColor = '#fad2cf';
-            } else if (state === 'syncing') {
-                statusEl.innerHTML = '🟡 Syncing Data...';
-                statusEl.style.background = '#fff3cd';
-                statusEl.style.color = '#856404';
-                statusEl.style.borderColor = '#ffeeba';
-            }
-        }
-
-        window.addEventListener('online', () => setCloudStatus('online'));
-        window.addEventListener('offline', () => setCloudStatus('offline'));
-        window.addEventListener('load', () => { if (!navigator.onLine) setCloudStatus('offline'); });
-
-        // ==============================================
-        // INITIALIZATION
-        // ==============================================
         function init() {
             const grid = document.getElementById('profileGrid');
             grid.innerHTML = '';
@@ -530,7 +464,7 @@
                     document.getElementById('accountScreen').style.display = 'none';
                     document.getElementById('dashboardScreen').style.display = 'grid';
                     document.getElementById('currentWorkspaceTitle').innerText = currentCompany;
-                    loadData(); 
+                    loadData(); // Load data from Firebase
                 };
                 card.innerHTML = `<div class="delete-btn" onclick="event.stopPropagation(); companies.splice(${i},1); save(); init();">×</div>
                                   <div class="avatar" style="background:${co.color}">${co.name[0]}</div><h3>${co.name}</h3>`;
@@ -545,63 +479,52 @@
         function save() { localStorage.setItem('userCos', JSON.stringify(companies)); }
 
         // ==============================================
-        // DATA PERSISTENCE & CHUNKED CLOUD STORAGE
+        // DATA PERSISTENCE (FIREBASE CLOUD STORAGE)
         // ==============================================
         async function loadData() {
             reportData = [];
-            document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading ALL-TIME data from cloud...</td></tr>';
-            
-            setCloudStatus('syncing'); 
+            document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading data from cloud...</td></tr>';
             
             try {
                 const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
                 
                 snapshot.forEach(doc => {
-                    let data = doc.data();
-                    if (!data.uid) data.uid = doc.id; 
-                    reportData.push(data);
+                    reportData.push(doc.data());
                 });
 
                 if (reportData.length > 0) {
-                    reportData.sort((a,b) => new Date(b.reqDate) - new Date(a.reqDate));
-                    
                     document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
-                        <tr><td>${d.orderDate||'-'}</td><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
+                        <tr><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
                         <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
                         <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
                     `).join('');
                 } else {
-                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">No data found. Upload a report.</td></tr>';
+                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">No data found. Upload a report.</td></tr>';
                 }
                 updateStats();
-                setCloudStatus(navigator.onLine ? 'online' : 'offline'); 
-                
             } catch (error) {
                 console.error("Error loading data:", error);
-                setCloudStatus('offline');
-                alert("Failed to load data from Firebase. Check your internet connection and Database Rules.");
+                alert("Failed to load data from Firebase. Check your connection.");
             }
         }
 
         async function saveData() {
             if (currentCompany) {
-                setCloudStatus('syncing'); 
                 try {
+                    const batch = db.batch();
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-                    const chunkSize = 400;
-                    for (let i = 0; i < reportData.length; i += chunkSize) {
-                        const chunk = reportData.slice(i, i + chunkSize);
-                        const batch = db.batch();
-                        chunk.forEach(item => {
-                            const docRef = collectionRef.doc(item.uid);
-                            batch.set(docRef, item, { merge: true }); 
-                        });
-                        await batch.commit();
-                    }
-                    setCloudStatus(navigator.onLine ? 'online' : 'offline');
+
+                    reportData.forEach(item => {
+                        // Handle missing tracking IDs gracefully to prevent overwriting
+                        const docId = item.trackingId !== 'NO-TRK' && item.trackingId ? item.trackingId : item.orderId; 
+                        const docRef = collectionRef.doc(docId);
+                        batch.set(docRef, item, { merge: true }); 
+                    });
+
+                    await batch.commit();
+                    console.log("Master file synced to cloud.");
                 } catch (e) {
                     console.error("Error saving to Firebase:", e);
-                    setCloudStatus('offline');
                     alert("Error syncing to the cloud.");
                 }
             }
@@ -625,7 +548,7 @@
                     const data = JSON.parse(e.target.result);
                     if (Array.isArray(data)) {
                         reportData = data;
-                        saveData(); 
+                        saveData(); // Save restored data to Firebase
                         loadData();
                         alert("Backup restored successfully! Loaded " + data.length + " records.");
                         if(document.getElementById('master').classList.contains('active')) renderMasterTable();
@@ -642,33 +565,26 @@
         }
 
         async function clearCompanyData() {
-            if(confirm("Are you sure you want to clear all ALL-TIME saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
-                if (reportData.length > 0) exportBackup(); 
+            if(confirm("Are you sure you want to clear all saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
+                if (reportData.length > 0) {
+                    exportBackup(); 
+                }
                 
                 try {
-                    setCloudStatus('syncing');
+                    // Delete all documents in the Firestore collection
                     const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
-                    const docs = snapshot.docs;
-                    const chunkSize = 400;
-                    for (let i = 0; i < docs.length; i += chunkSize) {
-                        const chunk = docs.slice(i, i + chunkSize);
-                        const batch = db.batch();
-                        chunk.forEach((doc) => { batch.delete(doc.ref); });
-                        await batch.commit();
-                    }
+                    const batch = db.batch();
+                    snapshot.docs.forEach((doc) => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
                     
                     reportData = [];
-                    document.getElementById('ingestionTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center;">No data found. Upload a report.</td></tr>';
-                    updateStats();
-                    if(document.getElementById('master').classList.contains('active')) renderMasterTable();
-                    if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
-                    
+                    loadData();
                     alert("Cloud data cleared.");
-                    setCloudStatus(navigator.onLine ? 'online' : 'offline');
                 } catch(e) {
                     console.error("Error clearing data:", e);
-                    setCloudStatus('offline');
-                    alert("Error clearing data from Firebase. Check console for details.");
+                    alert("Error clearing data from Firebase.");
                 }
             }
         }
@@ -687,12 +603,16 @@
         // ==============================================
         // MULTI-SELECT FILTER UI LOGIC
         // ==============================================
-        function toggleMS(id) { document.getElementById(id).classList.toggle('show'); }
+        function toggleMS(id) {
+            document.getElementById(id).classList.toggle('show');
+        }
+
         window.onclick = function(event) {
             if (!event.target.closest('.ms-dropdown')) {
                 document.querySelectorAll('.ms-content.show').forEach(el => el.classList.remove('show'));
             }
         }
+
         function filterMSLocal(input) {
             const filter = input.value.toUpperCase();
             const labels = input.nextElementSibling.getElementsByTagName('label');
@@ -701,17 +621,22 @@
                 labels[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
             }
         }
+
         function populateMS(containerId, values, callbackName) {
             const container = document.getElementById(containerId);
             if(!container) return;
+            
             let cleanVals = values.filter(v => v !== undefined && v !== null && v !== "").map(v=>v.toString());
             cleanVals.sort((a, b) => a.localeCompare(b, undefined, {numeric: true})); 
+            
             const checkedBoxes = Array.from(container.querySelectorAll('input:checked')).map(cb => cb.value);
+            
             container.innerHTML = cleanVals.map(v => {
                 const isChecked = checkedBoxes.includes(v) ? 'checked' : '';
                 return `<label class="ms-label"><input type="checkbox" value="${v}" onchange="${callbackName}()" ${isChecked}> ${v}</label>`;
             }).join('');
         }
+
         function getMSSelected(containerId) {
             const container = document.getElementById(containerId);
             if(!container) return [];
@@ -794,11 +719,14 @@
 
             let totalConditionCost = cDamaged.cost + cDiff.cost + cMiss.cost + cLost.cost; 
             let totalClaimReceived = cDamaged.v + cDiff.v + cMiss.v + cLost.v + cFake.v;
+            
             let plAmount = totalClaimReceived - totalConditionCost;
             let plPercentage = totalConditionCost > 0 ? (plAmount / totalConditionCost) * 100 : 0;
+            
             let plColor = plAmount >= 0 ? "#0f5132" : "#d93025"; 
             let plBg = plAmount >= 0 ? "#e8f5e9" : "#fce8e6";
             let plText = plAmount >= 0 ? "Profit" : "Loss";
+
             const formatAmt = (num) => "₹" + num.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
             container.innerHTML = `
@@ -859,101 +787,44 @@
         // 1. DATA INGESTION
         // ==============================================
         function processAmazonReport() {
-            const fileInput = document.getElementById('amazonReport');
-            const file = fileInput.files[0];
-            
-            if(!file) return alert("⚠️ Please click 'Choose File' and select your Amazon Return Report first.");
-
-            setCloudStatus('syncing');
+            const file = document.getElementById('amazonReport').files[0];
+            if(!file) return;
 
             const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const rows = e.target.result.split('\n');
-                    if(rows.length < 2) throw new Error("File appears to be empty.");
-                    
-                    const h = rows[0].split('\t');
-                    
-                    const map = { 
-                        oid: h.indexOf('Order ID'), 
-                        reqDate: h.indexOf('Return request date'), 
-                        oDate: h.findIndex(col => col.toLowerCase().includes('order date')), 
-                        tid: h.indexOf('Tracking ID'), 
-                        sku: h.indexOf(' Merchant SKU'), 
-                        asin: h.indexOf('ASIN'), 
-                        reason: h.indexOf('Return reason'), 
-                        oAmt: h.indexOf('Order Amount'), 
-                        oQty: h.indexOf('Order quantity') 
+            reader.onload = (e) => {
+                const rows = e.target.result.split('\n');
+                const h = rows[0].split('\t');
+                
+                const map = { 
+                    oid: h.indexOf('Order ID'), reqDate: h.indexOf('Return request date'), 
+                    tid: h.indexOf('Tracking ID'), sku: h.indexOf(' Merchant SKU'), asin: h.indexOf('ASIN'), 
+                    reason: h.indexOf('Return reason'), oAmt: h.indexOf('Order Amount'), oQty: h.indexOf('Order quantity') 
+                };
+                
+                reportData = rows.slice(1).filter(r => r.trim()).map((r, idx) => {
+                    const c = r.split('\t');
+                    let amt = c[map.oAmt] ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
+                    let tid = c[map.tid] ? c[map.tid] : `NO-TRK-${idx}`; 
+
+                    return { 
+                        orderId: c[map.oid], reqDate: c[map.reqDate], trackingId: tid, 
+                        sku: c[map.sku], asin: c[map.asin], amzReason: c[map.reason], 
+                        oAmt: amt, oQty: c[map.oQty] || "1", 
+                        status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
+                        claimId: '', claimDate: '', amtRec: '', delDate: ''
                     };
-                    
-                    let validRecords = [];
-                    let occurrenceTracker = {}; 
+                });
 
-                    rows.slice(1).forEach((r, idx) => {
-                        if (!r.trim()) return; 
-
-                        const c = r.split('\t');
-                        if (c.length < 3) return;
-
-                        let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].trim() : "";
-                        if (oid === 'Order ID') return; 
-                        
-                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].trim() : "";
-                        let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].trim() : "";
-                        let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].trim() : "";
-
-                        if (!oid && !tid) return; 
-
-                        let amt = (map.oAmt !== -1 && c[map.oAmt]) ? c[map.oAmt].replace(/[^0-9.-]+/g,"") : "0";
-                        
-                        let baseId = `${oid}_${sku || asin}_${tid}`.replace(/[^a-zA-Z0-9_-]/g, '');
-                        if (!baseId || baseId === '__') baseId = `FALLBACK-${idx}`;
-
-                        occurrenceTracker[baseId] = (occurrenceTracker[baseId] || 0) + 1;
-                        let uniqueId = occurrenceTracker[baseId] > 1 ? `${baseId}_part${occurrenceTracker[baseId]}` : baseId;
-
-                        validRecords.push({
-                            uid: uniqueId,  
-                            orderDate: (map.oDate !== -1 && c[map.oDate]) ? c[map.oDate] : "",
-                            orderId: oid || `UNKNOWN-OID-${Date.now()}-${idx}`,
-                            reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "",
-                            trackingId: tid,
-                            sku: sku,
-                            asin: asin,
-                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "",
-                            oAmt: amt,
-                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1",
-                            status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
-                            claimId: '', claimDate: '', amtRec: '', delDate: ''
-                        });
-                    });
-
-                    if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
-
-                    const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
-                    const chunkSize = 400; 
-                    for (let i = 0; i < validRecords.length; i += chunkSize) {
-                        const chunk = validRecords.slice(i, i + chunkSize);
-                        const batch = db.batch();
-                        chunk.forEach(item => {
-                            const docRef = collectionRef.doc(item.uid);
-                            batch.set(docRef, item, { merge: true }); 
-                        });
-                        await batch.commit();
-                    }
-                    
-                    await loadData();
-                    alert(`Success! Safely merged ${validRecords.length} records into your All-Time Cloud Master File!`);
-                    fileInput.value = ''; 
-                    
-                } catch (err) {
-                    console.error("Upload error:", err);
-                    alert(`Upload failed: ${err.message}\n\nPlease check your internet connection or Firebase Permissions.`);
-                    setCloudStatus('offline');
-                }
+                document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
+                    <tr><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
+                    <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
+                    <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
+                `).join('');
+                
+                saveData(); // Save to Firebase
+                updateStats();
+                alert(`Loaded ${reportData.length} records.`);
             };
-            
-            reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); };
             reader.readAsText(file);
         }
 
@@ -965,7 +836,7 @@
             const podFile = document.getElementById('podFile').files[0];
             let podText = document.getElementById('podText').value.trim();
 
-            if (reportData.length === 0) return alert("Please wait for all-time data to load first.");
+            if (reportData.length === 0) return alert("Upload Amazon Return Report first.");
             if (!podDate) return alert("Select Delivery Date.");
 
             if (podFile) {
@@ -993,7 +864,7 @@
             if(expectedDeliveries.length === 0) {
                 alert("No IDs matched the report, or matched IDs had blank Tracking Numbers.");
             } else {
-                saveData(); 
+                saveData(); // Save to Firebase
                 renderScanTable();
                 updateStats();
                 alert(`Matched ${expectedDeliveries.length} expected deliveries.`);
@@ -1004,12 +875,12 @@
         function renderScanTable() {
             const pendingScans = expectedDeliveries.filter(d => d.status === 'Pending Scan');
             document.getElementById('scanTableBody').innerHTML = pendingScans.map(d => `
-                <tr id="row-${d.uid}">
+                <tr id="row-${d.trackingId}">
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
                     <td>${d.trackingId}</td>
                     <td style="font-size:12px;"><b>Val:</b> ${d.oAmt}<br><b>Exp Qty:</b> ${d.oQty}</td>
                     <td>
-                        <select id="cond-${d.uid}" disabled style="width:100%; padding:4px;">
+                        <select id="cond-${d.trackingId}" disabled style="width:100%; padding:4px;">
                             <option value="">-Select Condition-</option>
                             <option value="Saleable">Saleable</option>
                             <option value="Damaged">Damaged</option>
@@ -1019,8 +890,8 @@
                         </select>
                     </td>
                     <td>
-                        <input type="number" id="qty-${d.uid}" placeholder="Rec. Qty" style="width:70px;" disabled>
-                        <button id="saveBtn-${d.uid}" onclick="logItem('${d.uid}')" class="save-btn" style="margin-left:10px; width:auto;" disabled>Save</button>
+                        <input type="number" id="qty-${d.trackingId}" placeholder="Rec. Qty" style="width:70px;" disabled>
+                        <button id="saveBtn-${d.trackingId}" onclick="logItem('${d.trackingId}')" class="save-btn" style="margin-left:10px; width:auto;" disabled>Save</button>
                     </td>
                 </tr>`).join('');
         }
@@ -1044,14 +915,14 @@
                     feedback.style.color = "green";
                     input.value = '';
                     
-                    const row = document.getElementById(`row-${item.uid}`);
+                    const row = document.getElementById(`row-${item.trackingId}`);
                     row.classList.add('active-scan-row');
                     document.getElementById('scanTableBody').prepend(row);
                     
-                    document.getElementById(`cond-${item.uid}`).disabled = false;
-                    document.getElementById(`qty-${item.uid}`).disabled = false;
-                    document.getElementById(`saveBtn-${item.uid}`).disabled = false;
-                    document.getElementById(`cond-${item.uid}`).focus();
+                    document.getElementById(`cond-${item.trackingId}`).disabled = false;
+                    document.getElementById(`qty-${item.trackingId}`).disabled = false;
+                    document.getElementById(`saveBtn-${item.trackingId}`).disabled = false;
+                    document.getElementById(`cond-${item.trackingId}`).focus();
                 } else { 
                     input.classList.add('highlight-red'); 
                     feedback.innerText = `Not Found or Already Scanned: ${val}`;
@@ -1061,10 +932,10 @@
             }, 150); 
         }
 
-        function logItem(uid) {
-            const item = expectedDeliveries.find(d => d.uid === uid);
-            const cond = document.getElementById(`cond-${uid}`).value;
-            const recQty = document.getElementById(`qty-${uid}`).value;
+        function logItem(tid) {
+            const item = expectedDeliveries.find(d => d.trackingId === tid);
+            const cond = document.getElementById(`cond-${tid}`).value;
+            const recQty = document.getElementById(`qty-${tid}`).value;
 
             if (!cond) return alert("Please select a condition.");
             if (cond !== 'Lost' && !recQty) return alert("Please enter the Received Quantity.");
@@ -1083,8 +954,8 @@
                 item.claimStatus = 'Pending Claim';
             }
             
-            saveData(); 
-            document.getElementById(`row-${uid}`).style.display = 'none';
+            saveData(); // Save to Firebase
+            document.getElementById(`row-${tid}`).style.display = 'none';
             unlockScanner();
             updateStats();
         }
@@ -1107,7 +978,6 @@
 
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
-                if (d.conditionLog === 'Return Cancelled') return false; 
                 if (d.delDate) {
                     let dDate = new Date(d.delDate);
                     dDate.setHours(0, 0, 0, 0);
@@ -1127,7 +997,7 @@
 
             document.getElementById('safetyTableBody').innerHTML = claims.map(d => {
                 let rowColor = d.claimStatus === 'Under Review' ? 'background:#fff8e1;' : ''; 
-                let isEditing = editingSafetyRows.includes(d.uid);
+                let isEditing = editingSafetyRows.includes(d.orderId);
                 let contentHtml = '';
 
                 if (d.claimStatus === 'Approved' && !isEditing) {
@@ -1139,41 +1009,41 @@
                         </td>
                         <td>
                             <span style="font-weight:bold; color:green;">Approved</span><br>
-                            <button onclick="editSafetyRow('${d.uid}')" class="edit-btn" style="margin-top:10px;">Edit</button>
+                            <button onclick="editSafetyRow('${d.orderId}')" class="edit-btn" style="margin-top:10px;">Edit</button>
                         </td>
                     `;
                 } else {
                     let hideActions = (d.conditionLog === 'Saleable' && !d.claimId) ? 'display:none;' : '';
                     contentHtml = `
                         <td>
-                            <input type="text" id="cid-${d.uid}" placeholder="Claim ID" value="${d.claimId}" style="width:120px; margin-bottom:5px;" onkeyup="toggleSafetySave('${d.uid}', '${d.conditionLog}')"><br>
-                            <input type="date" id="cdate-${d.uid}" value="${d.claimDate}" onchange="toggleSafetySave('${d.uid}', '${d.conditionLog}')">
+                            <input type="text" id="cid-${d.orderId}" placeholder="Claim ID" value="${d.claimId}" style="width:120px; margin-bottom:5px;" onkeyup="toggleSafetySave('${d.orderId}', '${d.conditionLog}')"><br>
+                            <input type="date" id="cdate-${d.orderId}" value="${d.claimDate}" onchange="toggleSafetySave('${d.orderId}', '${d.conditionLog}')">
                         </td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             <div style="display:flex; align-items:center; gap:5px;">
-                                Amt: <input type="number" id="amt-${d.uid}" placeholder="Amt" value="${d.amtRec}" onkeyup="calcSafety(this)" style="width:60px;">
-                                Qty: <input type="number" id="cqty-${d.uid}" placeholder="Qty" value="${d.recQty}" style="width:40px;">
+                                Amt: <input type="number" id="amt-${d.orderId}" placeholder="Amt" value="${d.amtRec}" onkeyup="calcSafety(this)" style="width:60px;">
+                                Qty: <input type="number" id="cqty-${d.orderId}" placeholder="Qty" value="${d.recQty}" style="width:40px;">
                             </div>
                             <div class="calc-alert" style="color:red; font-weight:bold; font-size:11px; margin-top:2px;"></div>
                         </td>
                         <td>
-                            <select id="cstatus-${d.uid}" style="margin-bottom:5px; width:100%; padding:4px;">
+                            <select id="cstatus-${d.orderId}" style="margin-bottom:5px; width:100%; padding:4px;">
                                 <option value="None" ${d.claimStatus==='None'?'selected':''}>None</option>
                                 <option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option>
                                 <option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Under Review</option>
                                 <option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option>
                             </select><br>
-                            <div id="safety-actions-${d.uid}" style="${hideActions}">
-                                <button onclick="saveClaim('${d.uid}')" class="save-btn">Save</button>
-                                <button onclick="cancelSafetyRow('${d.uid}')" class="cancel-btn">Cancel</button>
+                            <div id="safety-actions-${d.orderId}" style="${hideActions}">
+                                <button onclick="saveClaim('${d.orderId}')" class="save-btn">Save</button>
+                                <button onclick="cancelSafetyRow('${d.orderId}')" class="cancel-btn">Cancel</button>
                             </div>
                         </td>
                     `;
                 }
 
-                return `<tr id="safety-row-${d.uid}" style="${rowColor}">
-                    <td>${d.delDate||'-'}</td>
+                return `<tr id="safety-row-${d.orderId}" style="${rowColor}">
+                    <td>${d.delDate}</td>
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
                     ${contentHtml}
@@ -1184,14 +1054,14 @@
             filterSafety();
         }
 
-        function toggleSafetySave(uid, cond) {
+        function toggleSafetySave(oid, cond) {
             if (cond === 'Saleable') {
-                const cidVal = document.getElementById('cid-'+uid).value.trim();
-                document.getElementById('safety-actions-'+uid).style.display = cidVal ? 'block' : 'none';
+                const cidVal = document.getElementById('cid-'+oid).value.trim();
+                document.getElementById('safety-actions-'+oid).style.display = cidVal ? 'block' : 'none';
             }
         }
-        function editSafetyRow(uid) { editingSafetyRows.push(uid); renderSafetyTable(); }
-        function cancelSafetyRow(uid) { editingSafetyRows = editingSafetyRows.filter(id => id !== uid); renderSafetyTable(); }
+        function editSafetyRow(oid) { editingSafetyRows.push(oid); renderSafetyTable(); }
+        function cancelSafetyRow(oid) { editingSafetyRows = editingSafetyRows.filter(id => id !== oid); renderSafetyTable(); }
 
         function filterSafety() {
             const dateType = document.getElementById("safetyDateType").value;
@@ -1201,58 +1071,50 @@
             
             const searchType = document.getElementById("safetySearchType").value;
             const searchVals = getMSSelected("ms-opt-safetySearch");
-            
+
             const claimType = document.getElementById("safetyClaimSearchType").value;
             const claimVals = getMSSelected("ms-opt-safetyClaimSearch");
-            
+
             const valType = document.getElementById("safetyValType").value;
             const valVals = getMSSelected("ms-opt-safetyValSearch");
-            
+
             const condFilter = document.getElementById("safetyCond").value.toUpperCase();
             const statusFilter = document.getElementById("safetyStatus").value.toUpperCase();
 
             const tr = document.getElementById("safetyTableBody").getElementsByTagName("tr");
+
             let aSearch = new Set(), aClaim = new Set(), aVal = new Set();
-            
+
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
-                const uid = row.id.replace('safety-row-', '');
-                const d = reportData.find(item => item.uid === uid);
+                const oid = row.id.replace('safety-row-', '');
+                const d = reportData.find(item => item.orderId === oid);
                 if (!d) continue;
 
-                let mDate = false;
-                if (dateType === 'all') {
-                    mDate = d.delDate && d.delDate.trim() !== '';
-                } else {
-                    const dVal = d.delDate || "";
-                    if (dVal) {
-                        if (dateType === 'exact' && dateExact) mDate = (dVal === dateExact);
-                        else if (dateType === 'range') {
-                            if (dateStart && dateEnd) mDate = (dVal >= dateStart && dVal <= dateEnd);
-                            else if (dateStart) mDate = (dVal >= dateStart);
-                            else if (dateEnd) mDate = (dVal <= dateEnd);
-                            else mDate = true;
-                        } else { mDate = true; }
-                    }
+                let mDate = true;
+                if (dateType === 'exact' && dateExact) mDate = (d.delDate === dateExact);
+                else if (dateType === 'range') {
+                    if (dateStart && dateEnd) mDate = (d.delDate >= dateStart && d.delDate <= dateEnd);
+                    else if (dateStart) mDate = (d.delDate >= dateStart);
+                    else if (dateEnd) mDate = (d.delDate <= dateEnd);
                 }
-
                 let mCond = condFilter === "" || d.conditionLog.toUpperCase().includes(condFilter);
                 
-                const dynamicStatus = document.getElementById(`cstatus-${uid}`);
+                const dynamicStatus = document.getElementById(`cstatus-${oid}`);
                 const currentStatus = dynamicStatus ? dynamicStatus.value.toUpperCase() : d.claimStatus.toUpperCase();
                 let mStatus = statusFilter === "" || currentStatus.includes(statusFilter);
 
                 let vSearch = (d[searchType]||"").toString().toUpperCase();
                 let mSearch = searchVals.length === 0 || searchVals.includes(vSearch);
 
-                const dynCid = document.getElementById(`cid-${uid}`);
-                const dynCDate = document.getElementById(`cdate-${uid}`);
+                const dynCid = document.getElementById(`cid-${oid}`);
+                const dynCDate = document.getElementById(`cdate-${oid}`);
                 let vClaim = claimType === 'claimId' ? (dynCid ? dynCid.value : (d.claimId||"")) : (dynCDate ? dynCDate.value : (d.claimDate||""));
                 vClaim = vClaim.toString().toUpperCase();
                 let mClaim = claimVals.length === 0 || claimVals.includes(vClaim);
 
-                const dynAmt = document.getElementById(`amt-${uid}`);
-                const dynQty = document.getElementById(`cqty-${uid}`);
+                const dynAmt = document.getElementById(`amt-${oid}`);
+                const dynQty = document.getElementById(`cqty-${oid}`);
                 let vVal = (d[valType]||"").toString().toUpperCase();
                 if (valType === 'amtRec' && dynAmt) vVal = dynAmt.value.toUpperCase();
                 if (valType === 'recQty' && dynQty) vVal = dynQty.value.toUpperCase();
@@ -1283,13 +1145,13 @@
             else alertSpan.innerHTML = "";
         }
 
-        function saveClaim(uid) {
-            const item = reportData.find(d => d.uid === uid);
-            const cid = document.getElementById(`cid-${uid}`).value.trim();
-            const cdate = document.getElementById(`cdate-${uid}`).value;
-            const amt = document.getElementById(`amt-${uid}`).value;
-            const cqty = document.getElementById(`cqty-${uid}`).value;
-            let cstatus = document.getElementById(`cstatus-${uid}`).value;
+        function saveClaim(oid) {
+            const item = reportData.find(d => d.orderId === oid);
+            const cid = document.getElementById(`cid-${oid}`).value.trim();
+            const cdate = document.getElementById(`cdate-${oid}`).value;
+            const amt = document.getElementById(`amt-${oid}`).value;
+            const cqty = document.getElementById(`cqty-${oid}`).value;
+            let cstatus = document.getElementById(`cstatus-${oid}`).value;
 
             if (item.conditionLog === 'Saleable' && cid !== '') {
                 item.conditionLog = 'Fake';
@@ -1301,8 +1163,8 @@
 
             item.claimId = cid; item.claimDate = cdate; item.amtRec = amt; item.recQty = cqty; item.claimStatus = cstatus;
 
-            saveData(); 
-            editingSafetyRows = editingSafetyRows.filter(id => id !== uid);
+            saveData(); // Save to Firebase
+            editingSafetyRows = editingSafetyRows.filter(id => id !== oid);
             renderSafetyTable(); 
             updateStats();
         }
@@ -1330,9 +1192,12 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE 
+        // 6. MASTER FILE (MERGED LOGIC)
         // ==============================================
         function renderMasterTable() {
+            orderIdCounts = {};
+            reportData.forEach(d => orderIdCounts[d.orderId] = (orderIdCounts[d.orderId] || 0) + 1);
+
             const groupedData = {};
             reportData.forEach(d => {
                 if(!groupedData[d.orderId]) groupedData[d.orderId] = [];
@@ -1347,28 +1212,18 @@
         function getMasterRowHTML(items, isEditing) {
             const oid = items[0].orderId;
             const isMultiple = items.length > 1;
-            
             let dupHtml = isMultiple ? `background-color:#fff3cd; border-left:4px solid #ffc107;` : ``;
             let dupWarn = isMultiple ? `<br><span style="color:#d39e00; font-size:10px; font-weight:bold;">⚠️ MULTIPLE TRACKINGS</span>` : ``;
 
-            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}<br><b>SKU:</b> ${d.sku}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
-            let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${d.orderDate||'-'}<br>Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            let datesHtml = items.map(d => `<div style="padding:4px 0;">Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.trackingId}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.trackingId}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let valQtyHtml = items.map(d => `<div style="padding:4px 0;">Val: <b>${d.oAmt}</b><br>Exp Qty: ${d.oQty}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             
             let statCondHtml = items.map(d => {
                 if(isEditing) {
                     return `<div style="padding:4px 0;">
-                        <select id="em-status-${d.uid}" class="master-input" style="width:100px;"><option value="In Transit" ${d.status==='In Transit'?'selected':''}>In Transit</option><option value="Pending Scan" ${d.status==='Pending Scan'?'selected':''}>Pending Scan</option><option value="Received" ${d.status==='Received'?'selected':''}>Received</option><option value="Lost" ${d.status==='Lost'?'selected':''}>Lost</option></select><br>
-                        <select id="em-cond-${d.uid}" class="master-input" style="width:100px;">
-                            <option value="">-Cond-</option>
-                            <option value="Saleable" ${d.conditionLog==='Saleable'?'selected':''}>Saleable</option>
-                            <option value="Damaged" ${d.conditionLog==='Damaged'?'selected':''}>Damaged</option>
-                            <option value="Different" ${d.conditionLog==='Different'?'selected':''}>Different</option>
-                            <option value="Missing Quantity" ${d.conditionLog==='Missing Quantity'?'selected':''}>Missing Qty</option>
-                            <option value="Lost" ${d.conditionLog==='Lost'?'selected':''}>Lost</option>
-                            <option value="Fake" ${d.conditionLog==='Fake'?'selected':''}>Fake</option>
-                            <option value="Return Cancelled" ${d.conditionLog==='Return Cancelled'?'selected':''}>Return Cancelled</option>
-                        </select>
+                        <select id="em-status-${d.trackingId}" class="master-input" style="width:100px;"><option value="In Transit" ${d.status==='In Transit'?'selected':''}>In Transit</option><option value="Pending Scan" ${d.status==='Pending Scan'?'selected':''}>Pending Scan</option><option value="Received" ${d.status==='Received'?'selected':''}>Received</option><option value="Lost" ${d.status==='Lost'?'selected':''}>Lost</option></select><br>
+                        <select id="em-cond-${d.trackingId}" class="master-input" style="width:100px;"><option value="">-Cond-</option><option value="Saleable" ${d.conditionLog==='Saleable'?'selected':''}>Saleable</option><option value="Damaged" ${d.conditionLog==='Damaged'?'selected':''}>Damaged</option><option value="Different" ${d.conditionLog==='Different'?'selected':''}>Different</option><option value="Missing Quantity" ${d.conditionLog==='Missing Quantity'?'selected':''}>Missing Qty</option><option value="Lost" ${d.conditionLog==='Lost'?'selected':''}>Lost</option><option value="Fake" ${d.conditionLog==='Fake'?'selected':''}>Fake</option></select>
                     </div>`;
                 } else {
                     return `<div style="padding:4px 0;"><span style="font-weight:bold;">${d.status}</span><br>${d.conditionLog||'-'}</div>`;
@@ -1377,7 +1232,7 @@
 
             let recAmtHtml = items.map(d => {
                 if(isEditing) {
-                    return `<div style="padding:4px 0;">Qty: <input type="number" id="em-qty-${d.uid}" value="${d.recQty}" style="width:40px;"><br>Amt: <input type="number" id="em-amt-${d.uid}" value="${d.amtRec}" style="width:40px; margin-top:2px;"></div>`;
+                    return `<div style="padding:4px 0;">Qty: <input type="number" id="em-qty-${d.trackingId}" value="${d.recQty}" style="width:40px;"><br>Amt: <input type="number" id="em-amt-${d.trackingId}" value="${d.amtRec}" style="width:40px; margin-top:2px;"></div>`;
                 } else {
                     return `<div style="padding:4px 0;">Qty: ${d.recQty||'0'}<br>Amt: ${d.amtRec||'-'}</div>`;
                 }
@@ -1385,7 +1240,7 @@
             
             let cStatusHtml = items.map(d => {
                  if(isEditing) {
-                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.uid}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option></select></div>`;
+                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.trackingId}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option></select></div>`;
                 } else {
                     return `<div style="padding:4px 0;"><b>${d.claimStatus||'None'}</b></div>`;
                 }
@@ -1394,8 +1249,7 @@
             return `
                 <tr id="master-row-${oid}">
                     <td style="text-align: center; vertical-align:middle;"><input type="checkbox" class="export-checkbox" value="${oid}"></td>
-                    <td style="${dupHtml} vertical-align:top;"><b>${oid}</b>${dupWarn}</td>
-                    <td style="font-size:12px; vertical-align:top;">${trackAsinHtml}</td>
+                    <td style="${dupHtml} vertical-align:top;"><b>${oid}</b>${dupWarn}<br><br>${trackAsinHtml}</td>
                     <td style="font-size:12px; vertical-align:top;">${datesHtml}</td>
                     <td style="font-size:12px; vertical-align:top;">${valQtyHtml}</td>
                     <td style="vertical-align:top;">${statCondHtml}</td>
@@ -1424,33 +1278,31 @@
         function saveMasterRow(oid) {
             const items = reportData.filter(d => d.orderId === oid);
             items.forEach(item => {
-                const uid = item.uid;
-                let newStatus = document.getElementById(`em-status-${uid}`).value;
-                let newCond = document.getElementById(`em-cond-${uid}`).value;
-                let newClaim = document.getElementById(`em-cstatus-${uid}`).value;
-                let newCid = document.getElementById(`em-cid-${uid}`).value.trim();
+                const tid = item.trackingId;
+                let newStatus = document.getElementById(`em-status-${tid}`).value;
+                let newCond = document.getElementById(`em-cond-${tid}`).value;
+                let newClaim = document.getElementById(`em-cstatus-${tid}`).value;
+                let newCid = document.getElementById(`em-cid-${tid}`).value.trim();
 
                 if (newCond === 'Saleable' && newCid !== '') {
                     newCond = 'Fake';
-                    alert(`Condition for tracking ${item.trackingId} auto-updated to 'Fake' because a claim ID was provided for a Saleable item.`);
+                    alert(`Condition for ${tid} auto-updated to 'Fake' because a claim ID was provided for a Saleable item.`);
                 }
 
                 item.claimId = newCid; item.status = newStatus; item.conditionLog = newCond; 
-                item.claimStatus = newClaim; item.recQty = document.getElementById(`em-qty-${uid}`).value; 
-                item.amtRec = document.getElementById(`em-amt-${uid}`).value; item.claimDate = document.getElementById(`em-cdate-${uid}`).value;
+                item.claimStatus = newClaim; item.recQty = document.getElementById(`em-qty-${tid}`).value; 
+                item.amtRec = document.getElementById(`em-amt-${tid}`).value; item.claimDate = document.getElementById(`em-cdate-${tid}`).value;
             });
             
-            saveData(); 
+            saveData(); // Save to Firebase
             updateStats(); 
             document.getElementById(`master-row-${oid}`).outerHTML = getMasterRowHTML(items, false);
             filterMaster();
         }
 
         function filterMaster() {
-            const orderVals = getMSSelected('ms-opt-masterOrderId');
-            
-            const itemSearchType = document.getElementById("masterItemSearchType").value;
-            const itemSearchVals = getMSSelected('ms-opt-masterItemSearch');
+            const searchType = document.getElementById("masterSearchType").value;
+            const searchVals = getMSSelected('ms-opt-masterSearch');
             
             const dateTarget = document.getElementById("masterDateTarget").value; 
             const dateType = document.getElementById("masterDateType").value;
@@ -1470,78 +1322,64 @@
 
             const tr = document.getElementById("masterTableBody").getElementsByTagName("tr");
 
-            let aOrderId = new Set(), aItemSearch = new Set(), aVal = new Set(), aRec = new Set();
-            
-            let targetsToCheck = dateTarget === 'allTargets' ? ['reqDate', 'orderDate', 'delDate', 'claimDate'] : [dateTarget];
+            let aSearch = new Set(), aVal = new Set(), aRec = new Set();
 
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
-                const uidBox = row.querySelector('.export-checkbox');
-                if(!uidBox) continue; 
+                const oidBox = row.querySelector('.export-checkbox');
+                if(!oidBox) continue; 
                 
-                const oid = uidBox.value;
+                const oid = oidBox.value;
                 const items = reportData.filter(item => item.orderId === oid);
 
-                let mOrderId = orderVals.length === 0 || orderVals.includes(oid.toUpperCase());
-
                 let mDate = items.some(d => {
-                    if (dateType === 'all') {
-                        if (dateTarget === 'allTargets') return true;
-                        return d[dateTarget] && d[dateTarget].trim() !== '';
-                    } else {
-                        return targetsToCheck.some(tgt => {
-                            const dVal = d[tgt] || "";
-                            if (!dVal) return false;
-                            if (dateType === 'exact' && dateExact) return (dVal === dateExact);
-                            if (dateType === 'range') {
-                                if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
-                                if (dateStart) return (dVal >= dateStart);
-                                if (dateEnd) return (dVal <= dateEnd);
-                            }
-                            return true;
-                        });
+                    const dVal = d[dateTarget] || "";
+                    if (dateType === 'exact' && dateExact) return (dVal === dateExact);
+                    if (dateType === 'range') {
+                        if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
+                        if (dateStart) return (dVal >= dateStart);
+                        if (dateEnd) return (dVal <= dateEnd);
                     }
+                    return true;
                 });
 
                 let mStatus = items.some(d => {
-                    const el = document.getElementById(`em-status-${d.uid}`);
+                    const el = document.getElementById(`em-status-${d.trackingId}`);
                     return (el ? el.value : d.status).toUpperCase().includes(statusFilter);
                 }) || statusFilter === "";
 
                 let mCond = items.some(d => {
-                    const el = document.getElementById(`em-cond-${d.uid}`);
+                    const el = document.getElementById(`em-cond-${d.trackingId}`);
                     return (el ? el.value : d.conditionLog).toUpperCase().includes(condFilter);
                 }) || condFilter === "";
 
                 let mClaim = items.some(d => {
-                    const el = document.getElementById(`em-cstatus-${d.uid}`);
+                    const el = document.getElementById(`em-cstatus-${d.trackingId}`);
                     return (el ? el.value : d.claimStatus).toUpperCase().includes(claimFilter);
                 }) || claimFilter === "";
 
-                let mItemSearch = itemSearchVals.length === 0 || items.some(d => itemSearchVals.includes((d[itemSearchType]||"").toString().toUpperCase()));
+                let mSearch = searchVals.length === 0 || items.some(d => searchVals.includes((d[searchType]||"").toString().toUpperCase()));
                 let mVal = valVals.length === 0 || items.some(d => valVals.includes((d[valType]||"").toString().toUpperCase()));
                 
                 let mRec = recVals.length === 0 || items.some(d => {
-                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.uid}`);
+                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.trackingId}`);
                     const v = el ? el.value : d[recType];
                     return recVals.includes((v||"").toString().toUpperCase());
                 });
 
-                if (mOrderId && mDate && mStatus && mCond && mClaim && mItemSearch && mVal && mRec) row.style.display = "";
+                if (mDate && mStatus && mCond && mClaim && mSearch && mVal && mRec) row.style.display = "";
                 else row.style.display = "none";
 
                 let mOther = mDate && mStatus && mCond && mClaim;
-                if(mOther && mItemSearch && mVal && mRec) aOrderId.add(oid);
-                if(mOther && mOrderId && mVal && mRec) items.forEach(d => aItemSearch.add(d[itemSearchType]));
-                if(mOther && mOrderId && mItemSearch && mRec) items.forEach(d => aVal.add(d[valType]));
-                if(mOther && mOrderId && mItemSearch && mVal) items.forEach(d => {
-                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.uid}`);
+                if(mOther && mVal && mRec) items.forEach(d => aSearch.add(d[searchType]));
+                if(mOther && mSearch && mRec) items.forEach(d => aVal.add(d[valType]));
+                if(mOther && mSearch && mVal) items.forEach(d => {
+                    const el = document.getElementById(`em-${recType === 'recQty' ? 'qty' : 'amt'}-${d.trackingId}`);
                     aRec.add(el ? el.value : d[recType]);
                 });
             }
             
-            populateMS('ms-opt-masterOrderId', [...aOrderId], 'filterMaster');
-            populateMS('ms-opt-masterItemSearch', [...aItemSearch], 'filterMaster');
+            populateMS('ms-opt-masterSearch', [...aSearch], 'filterMaster');
             populateMS('ms-opt-masterValSearch', [...aVal], 'filterMaster');
             populateMS('ms-opt-masterRecSearch', [...aRec], 'filterMaster');
         }
@@ -1560,18 +1398,19 @@
 
         function exportMasterExcel() {
             const checkboxes = document.querySelectorAll('.export-checkbox:checked');
-            if (checkboxes.length === 0) return alert("Please select at least one order to export.");
+            
+            if (checkboxes.length === 0) {
+                return alert("Please select at least one order to export.");
+            }
 
-            const selectedOids = Array.from(checkboxes).map(cb => cb.value);
-            let dataToExport = reportData.filter(d => selectedOids.includes(d.orderId));
+            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+            const dataToExport = reportData.filter(d => selectedIds.includes(d.orderId));
 
-            dataToExport.sort((a, b) => a.orderId.localeCompare(b.orderId));
-
-            let csv = "Order ID,Order Date,Tracking ID,ASIN,SKU,Req Date,Delivery Date,Amz Reason,Value,Exp Qty,Rec Qty,Base Status,Condition,Claim Status,Claim ID,Claim Date,Amount Received\n";
+            let csv = "Order ID,Tracking ID,ASIN,SKU,Req Date,Delivery Date,Amz Reason,Value,Exp Qty,Rec Qty,Base Status,Condition,Claim Status,Claim ID,Claim Date,Amount Received\n";
             
             dataToExport.forEach(d => {
                 const safeReason = (d.amzReason || "").replace(/,/g, " ");
-                csv += `"${d.orderId}","${d.orderDate||''}","${d.trackingId}","${d.asin}","${d.sku}","${d.reqDate}","${d.delDate||''}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${d.claimDate||''}","${d.amtRec||''}"\n`;
+                csv += `"${d.orderId}","${d.trackingId}","${d.asin}","${d.sku}","${d.reqDate}","${d.delDate||''}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${d.claimDate||''}","${d.amtRec||''}"\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1594,10 +1433,13 @@
                 let c = text[i];
                 if (inQuote) {
                     if (c === '"') {
-                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
+                        if (text[i + 1] === '"') { col += '"'; i++; } 
+                        else { inQuote = false; }
                     } else { col += c; }
                 } else {
-                    if (c === '"') { inQuote = true; } else if (c === ',') { ret.push(col.trim()); col = ""; } else { col += c; }
+                    if (c === '"') { inQuote = true; }
+                    else if (c === ',') { ret.push(col.trim()); col = ""; }
+                    else { col += c; }
                 }
             }
             ret.push(col.trim());
@@ -1619,50 +1461,53 @@
                     
                     const cols = parseCSVLine(line);
                     
-                    if(cols.length >= 7) { 
+                    // Lowered requirement to handle Excel dropping empty trailing cells
+                    if(cols.length >= 6) {
+                        // Helper to safely get columns without breaking if they are missing
                         const safeGet = (index) => cols.length > index ? cols[index].replace(/^"|"$/g, '').trim() : '';
 
                         const oid = safeGet(0);
                         if (!oid || oid === 'Order ID') continue; 
                         
-                        const tid = safeGet(2);
-                        const sku = safeGet(4);
+                        const tid = safeGet(1);
                         
-                        const delDate = safeGet(6);
-                        const recQty = safeGet(10);
-                        const status = safeGet(11);
-                        const cond = safeGet(12);
-                        const cStatus = safeGet(13);
-                        const cid = safeGet(14);
-                        const cdate = safeGet(15);
-                        const amtRec = safeGet(16);
+                        const delDate = safeGet(5); // <-- Extracted the delivery date!
+                        const recQty = safeGet(9);
+                        const status = safeGet(10);
+                        const cond = safeGet(11);
+                        const cStatus = safeGet(12);
+                        const cid = safeGet(13);
+                        const cdate = safeGet(14);
+                        const amtRec = safeGet(15);
 
-                        let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
-                        if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
-
+                        let item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
+                        
                         if(item) {
-                            item.delDate = delDate; 
+                            if (delDate !== '') item.delDate = delDate;
                             
-                            if (cols.length > 10) item.recQty = recQty; 
-                            if (cols.length > 11) item.status = status; 
-                            if (cols.length > 12) item.conditionLog = cond;
-                            if (cols.length > 13) item.claimStatus = cStatus; 
-                            if (cols.length > 14) item.claimId = cid; 
-                            if (cols.length > 15) item.claimDate = cdate;
-                            if (cols.length > 16) item.amtRec = amtRec;
+                            if (cols.length > 9) item.recQty = recQty;
+                            if (cols.length > 10) item.status = status;
+                            if (cols.length > 11) item.conditionLog = cond;
+                            if (cols.length > 12) item.claimStatus = cStatus;
+                            if (cols.length > 13) item.claimId = cid;
+                            if (cols.length > 14) item.claimDate = cdate;
+                            if (cols.length > 15) item.amtRec = amtRec;
                             
                             if (item.conditionLog === 'Saleable' && item.claimId !== '') {
                                 item.conditionLog = 'Fake';
                             }
+                            
                             updatedCount++;
                         }
                     }
                 }
                 
-                saveData(); 
+                saveData(); // Save to Firebase
                 updateStats();
                 renderMasterTable();
-                if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
+                if(document.getElementById('safety').classList.contains('active')) {
+                    renderSafetyTable();
+                }
                 
                 alert(`Bulk update successful! ${updatedCount} records updated.`);
                 event.target.value = ''; 
