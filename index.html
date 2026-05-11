@@ -1120,6 +1120,10 @@
 
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
+                
+                // 🛑 BULLETPROOF CHECK: Hide if it has no condition (meaning it was never scanned)
+                if (!d.conditionLog || d.conditionLog.trim() === '') return false;
+                
                 if (d.conditionLog === 'Return Cancelled') return false; 
                 if (d.delDate) {
                     let dDate = new Date(d.delDate);
