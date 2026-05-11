@@ -481,15 +481,15 @@
 
     <script>
         // ==============================================
-        // FIREBASE INITIALIZATION
+        // FIREBASE INITIALIZATION (WITH YOUR NEW KEYS)
         // ==============================================
         const firebaseConfig = {
-          apiKey: "AIzaSyBObk3RqCk94jGjobyw5lE_GXLbgN0kgMg",
-          authDomain: "return-tracking-d4e83.firebaseapp.com",
-          projectId: "return-tracking-d4e83",
-          storageBucket: "return-tracking-d4e83.firebasestorage.app",
-          messagingSenderId: "892529435384",
-          appId: "1:892529435384:web:f21e2496d20b868d1f910d"
+          apiKey: "AIzaSyCfTzZ-s7JG7ONaWjlKSkrYrs6sDoaS-jw",
+          authDomain: "return-f381a.firebaseapp.com",
+          projectId: "return-f381a",
+          storageBucket: "return-f381a.firebasestorage.app",
+          messagingSenderId: "345555126580",
+          appId: "1:345555126580:web:9f9669cf1d60c2d9b97d61"
         };
 
         firebase.initializeApp(firebaseConfig);
@@ -953,10 +953,21 @@
 
                     if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
 
+                    // 🛑 SMART SYNC: Prevent duplicate writes to save Firebase quota
+                    const existingUids = new Set(reportData.map(d => d.uid));
+                    const newRecordsToUpload = validRecords.filter(record => !existingUids.has(record.uid));
+
+                    if (newRecordsToUpload.length === 0) {
+                        alert("Upload complete! No new records were found in this file, so 0 database quota was used.");
+                        fileInput.value = ''; 
+                        setCloudStatus('online');
+                        return;
+                    }
+
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
                     const chunkSize = 400; 
-                    for (let i = 0; i < validRecords.length; i += chunkSize) {
-                        const chunk = validRecords.slice(i, i + chunkSize);
+                    for (let i = 0; i < newRecordsToUpload.length; i += chunkSize) {
+                        const chunk = newRecordsToUpload.slice(i, i + chunkSize);
                         const batch = db.batch();
                         chunk.forEach(item => {
                             const docRef = collectionRef.doc(item.uid);
@@ -966,7 +977,7 @@
                     }
                     
                     await loadData();
-                    alert(`Success! Safely merged ${validRecords.length} records into your All-Time Cloud Master File!`);
+                    alert(`Success! Safely synced ${newRecordsToUpload.length} NEW records to your Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
