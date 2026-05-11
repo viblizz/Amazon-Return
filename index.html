@@ -61,7 +61,7 @@
         .stat-val { font-weight: bold; color: #202124; }
         .stat-amt { color: #d93025; font-size: 11px; display: block; text-align: right; margin-top: 2px; }
 
-        .filter-input { width: 100%; padding: 6px; font-size: 12px; border: 1px solid #dadce0; border-radius: 4px; box-sizing: border-box; }
+        .filter-input { width: 100%; padding: 6px; margin-top: 8px; font-size: 12px; border: 1px solid #dadce0; border-radius: 4px; box-sizing: border-box; }
         .master-input { width: 100%; padding: 4px; border: 1px solid #dadce0; border-radius: 4px; background: white; font-size: 12px; margin-bottom: 4px; }
         .master-input:focus { border-color: #1a73e8; outline: none; }
 
@@ -217,29 +217,20 @@
                 <table>
                     <thead>
                         <tr style="background: #f8f9fa;">
-                            <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Dates</div>
-                                <select id="safetyDateTarget" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0; margin-bottom:4px;">
-                                    <option value="allTargets">All Date Types</option>
-                                    <option value="reqDate">Req Date</option>
-                                    <option value="orderDate">Order Date</option>
-                                    <option value="delDate" selected>Del Date</option>
-                                    <option value="claimDate">Claim Date</option>
-                                </select>
-                                <select id="safetyDateType" class="filter-input safety-filter" onchange="toggleSafetyDateFilter(); filterSafety();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:150px;">Del. Date<br>
+                                <select id="safetyDateType" class="filter-input safety-filter" onchange="toggleSafetyDateFilter(); filterSafety();" style="margin-bottom:4px;">
                                     <option value="all">All Dates</option>
                                     <option value="exact">Exact Date</option>
                                     <option value="range">Date Range</option>
                                 </select>
-                                <input type="date" id="safetyDateExact" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0; display:none;">
-                                <div id="safetyDateRange" style="display:none; flex-direction:column; gap:4px; margin-top:0;">
-                                    <input type="date" id="safetyDateStart" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
-                                    <input type="date" id="safetyDateEnd" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
+                                <input type="date" id="safetyDateExact" class="filter-input safety-filter" onchange="filterSafety()" style="display:none;">
+                                <div id="safetyDateRange" style="display:none; flex-direction:column; gap:2px;">
+                                    <input type="date" id="safetyDateStart" class="filter-input safety-filter" onchange="filterSafety()">
+                                    <input type="date" id="safetyDateEnd" class="filter-input safety-filter" onchange="filterSafety()">
                                 </div>
                             </th>
-                            <th style="width:200px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Order / Track / ASIN</div>
-                                <select id="safetySearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:200px;">Order / Track / ASIN<br>
+                                <select id="safetySearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
                                     <option value="orderId">Order ID</option>
                                     <option value="trackingId">Tracking ID</option>
                                     <option value="asin">ASIN</option>
@@ -252,9 +243,8 @@
                                     </div>
                                 </div>
                             </th>
-                            <th style="vertical-align: top;">
-                                <div style="margin-bottom:4px;">Condition</div>
-                                <select id="safetyCond" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
+                            <th>Condition<br>
+                                <select id="safetyCond" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top: 30px;">
                                     <option value="">All Scanned</option>
                                     <option value="Saleable">Saleable</option>
                                     <option value="Damaged">Damaged</option>
@@ -263,9 +253,8 @@
                                     <option value="Lost">Lost</option>
                                 </select>
                             </th>
-                            <th style="width:180px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Claim ID & Date Raised</div>
-                                <select id="safetyClaimSearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:180px;">Claim ID & Date Raised<br>
+                                <select id="safetyClaimSearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
                                     <option value="claimId">Claim ID</option>
                                     <option value="claimDate">Date Raised</option>
                                 </select>
@@ -277,9 +266,8 @@
                                     </div>
                                 </div>
                             </th>
-                            <th style="width:150px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Values & Qty</div>
-                                <select id="safetyValType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
+                            <th style="width:150px;">Values & Qty<br>
+                                <select id="safetyValType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-bottom:4px;">
                                     <option value="oAmt">Order Value</option>
                                     <option value="oQty">Order Qty</option>
                                     <option value="amtRec">Amt Received</option>
@@ -293,9 +281,8 @@
                                     </div>
                                 </div>
                             </th>
-                            <th style="vertical-align: top;">
-                                <div style="margin-bottom:4px;">Approval Status</div>
-                                <select id="safetyStatus" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top:0;">
+                            <th>Approval Status<br>
+                                <select id="safetyStatus" class="filter-input safety-filter" onchange="filterSafety()" style="margin-top: 30px;">
                                     <option value="">All Statuses</option>
                                     <option value="None">None</option>
                                     <option value="Pending Claim">Pending</option>
@@ -1207,7 +1194,6 @@
         function cancelSafetyRow(uid) { editingSafetyRows = editingSafetyRows.filter(id => id !== uid); renderSafetyTable(); }
 
         function filterSafety() {
-            const dateTarget = document.getElementById("safetyDateTarget").value;
             const dateType = document.getElementById("safetyDateType").value;
             const dateExact = document.getElementById("safetyDateExact").value;
             const dateStart = document.getElementById("safetyDateStart").value;
@@ -1215,18 +1201,19 @@
             
             const searchType = document.getElementById("safetySearchType").value;
             const searchVals = getMSSelected("ms-opt-safetySearch");
+            
             const claimType = document.getElementById("safetyClaimSearchType").value;
             const claimVals = getMSSelected("ms-opt-safetyClaimSearch");
+            
             const valType = document.getElementById("safetyValType").value;
             const valVals = getMSSelected("ms-opt-safetyValSearch");
+            
             const condFilter = document.getElementById("safetyCond").value.toUpperCase();
             const statusFilter = document.getElementById("safetyStatus").value.toUpperCase();
 
             const tr = document.getElementById("safetyTableBody").getElementsByTagName("tr");
             let aSearch = new Set(), aClaim = new Set(), aVal = new Set();
             
-            let targetsToCheck = dateTarget === 'allTargets' ? ['reqDate', 'orderDate', 'delDate', 'claimDate'] : [dateTarget];
-
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
                 const uid = row.id.replace('safety-row-', '');
@@ -1235,23 +1222,18 @@
 
                 let mDate = false;
                 if (dateType === 'all') {
-                    if (dateTarget === 'allTargets') {
-                        mDate = true;
-                    } else {
-                        mDate = d[dateTarget] && d[dateTarget].trim() !== '';
-                    }
+                    mDate = d.delDate && d.delDate.trim() !== '';
                 } else {
-                    mDate = targetsToCheck.some(tgt => {
-                        const dVal = d[tgt] || "";
-                        if (!dVal) return false;
-                        if (dateType === 'exact' && dateExact) return (dVal === dateExact);
-                        if (dateType === 'range') {
-                            if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
-                            if (dateStart) return (dVal >= dateStart);
-                            if (dateEnd) return (dVal <= dateEnd);
-                        }
-                        return true;
-                    });
+                    const dVal = d.delDate || "";
+                    if (dVal) {
+                        if (dateType === 'exact' && dateExact) mDate = (dVal === dateExact);
+                        else if (dateType === 'range') {
+                            if (dateStart && dateEnd) mDate = (dVal >= dateStart && dVal <= dateEnd);
+                            else if (dateStart) mDate = (dVal >= dateStart);
+                            else if (dateEnd) mDate = (dVal <= dateEnd);
+                            else mDate = true;
+                        } else { mDate = true; }
+                    }
                 }
 
                 let mCond = condFilter === "" || d.conditionLog.toUpperCase().includes(condFilter);
@@ -1637,9 +1619,7 @@
                     
                     const cols = parseCSVLine(line);
                     
-                    // Relaxed column check to allow for Excel stripping trailing empty cells
                     if(cols.length >= 7) { 
-                        // Helper to safely get columns without breaking if they are missing
                         const safeGet = (index) => cols.length > index ? cols[index].replace(/^"|"$/g, '').trim() : '';
 
                         const oid = safeGet(0);
@@ -1663,7 +1643,6 @@
                         if(item) {
                             item.delDate = delDate; 
                             
-                            // Only overwrite the later columns if Excel didn't truncate them out
                             if (cols.length > 10) item.recQty = recQty; 
                             if (cols.length > 11) item.status = status; 
                             if (cols.length > 12) item.conditionLog = cond;
