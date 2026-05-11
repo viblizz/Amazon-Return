@@ -200,6 +200,16 @@
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 140px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Del Date</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-scanDateSearch')">Select Dates...</div>
+                                    <div class="ms-content" id="ms-scanDateSearch">
+                                        <input type="text" class="ms-search" placeholder="Search..." onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-scanDateSearch"></div>
+                                    </div>
+                                </div>
+                            </th>
                             <th>Order & ASIN</th>
                             <th>Tracking ID</th>
                             <th>Value & Exp. Qty</th>
@@ -495,7 +505,6 @@
         ];
         let companies = JSON.parse(localStorage.getItem('userCos')) || DEFAULT_CO;
         let reportData = []; 
-        let expectedDeliveries = []; 
         let scanTimer;
         let editingSafetyRows = []; 
         let currentCompany = ""; 
@@ -675,6 +684,7 @@
                     updateStats();
                     if(document.getElementById('master').classList.contains('active')) renderMasterTable();
                     if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
+                    if(document.getElementById('scanning').classList.contains('active')) renderScanTable();
                     
                     alert("Cloud data cleared.");
                     setCloudStatus(navigator.onLine ? 'online' : 'offline');
@@ -692,7 +702,7 @@
             document.getElementById(id).classList.add('active');
             btn.classList.add('active');
             
-            if(id === 'scanning') document.getElementById('scanInput').focus();
+            if(id === 'scanning') { renderScanTable(); document.getElementById('scanInput').focus(); }
             if(id === 'master') { renderMasterTable(); }
             if(id === 'safety') { renderSafetyTable(); }
         }
@@ -993,31 +1003,36 @@
 
             if (!podText.trim()) return alert("Upload a text file OR paste tracking text.");
 
-            expectedDeliveries = reportData.filter(item => {
-                if(!item.trackingId || item.trackingId.trim() === '') return false; 
+            let matchCount = 0;
+            reportData.forEach(item => {
+                if(!item.trackingId || item.trackingId.trim() === '') return; 
                 if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
                     item.delDate = podDate; 
-                    if(item.status === 'In Transit') item.status = 'Pending Scan'; 
-                    return true;
+                    if(item.status === 'In Transit') {
+                        item.status = 'Pending Scan'; 
+                    }
+                    matchCount++;
                 }
-                return false;
             });
             
-            if(expectedDeliveries.length === 0) {
+            if(matchCount === 0) {
                 alert("No IDs matched the report, or matched IDs had blank Tracking Numbers.");
             } else {
                 saveData(); 
                 renderScanTable();
                 updateStats();
-                alert(`Matched ${expectedDeliveries.length} expected deliveries.`);
+                alert(`Matched ${matchCount} expected deliveries. The table below now shows ALL pending scans.`);
                 document.getElementById('scanInput').focus();
             }
         }
 
         function renderScanTable() {
-            const pendingScans = expectedDeliveries.filter(d => d.status === 'Pending Scan');
+            const pendingScans = reportData.filter(d => d.status === 'Pending Scan');
+            pendingScans.sort((a,b) => new Date(b.delDate || 0) - new Date(a.delDate || 0));
+
             document.getElementById('scanTableBody').innerHTML = pendingScans.map(d => `
                 <tr id="row-${d.uid}">
+                    <td>${d.delDate || '-'}</td>
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
                     <td>${d.trackingId}</td>
                     <td style="font-size:12px;"><b>Val:</b> ${d.oAmt}<br><b>Exp Qty:</b> ${d.oQty}</td>
@@ -1036,6 +1051,31 @@
                         <button id="saveBtn-${d.uid}" onclick="logItem('${d.uid}')" class="save-btn" style="margin-left:10px; width:auto;" disabled>Save</button>
                     </td>
                 </tr>`).join('');
+                
+            filterScanTable();
+        }
+        
+        function filterScanTable() {
+            const dateVals = getMSSelected('ms-opt-scanDateSearch');
+            const tr = document.getElementById("scanTableBody").getElementsByTagName("tr");
+            let aDate = new Set();
+            
+            for (let i = 0; i < tr.length; i++) {
+                const row = tr[i];
+                const uid = row.id.replace('row-', '');
+                const d = reportData.find(item => item.uid === uid);
+                if (!d) continue;
+
+                let dVal = (d.delDate || "-").toUpperCase();
+                let mDate = dateVals.length === 0 || dateVals.includes(dVal);
+
+                if (mDate) row.style.display = "";
+                else row.style.display = "none";
+
+                aDate.add(d.delDate || "-");
+            }
+            
+            populateMS('ms-opt-scanDateSearch', [...aDate], 'filterScanTable');
         }
 
         function handleAutoScan(e) {
@@ -1046,7 +1086,7 @@
                 const val = input.value.trim();
                 if (val.length < 5) return; 
 
-                const item = expectedDeliveries.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
+                const item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
                 const feedback = document.getElementById('scanFeedback');
 
                 if(item) {
@@ -1075,7 +1115,7 @@
         }
 
         function logItem(uid) {
-            const item = expectedDeliveries.find(d => d.uid === uid);
+            const item = reportData.find(d => d.uid === uid);
             const cond = document.getElementById(`cond-${uid}`).value;
             const recQty = document.getElementById(`qty-${uid}`).value;
 
@@ -1097,9 +1137,9 @@
             }
             
             saveData(); 
-            document.getElementById(`row-${uid}`).style.display = 'none';
-            unlockScanner();
             updateStats();
+            renderScanTable(); 
+            unlockScanner();
         }
 
         function unlockScanner() {
@@ -1688,6 +1728,7 @@
                 updateStats();
                 renderMasterTable();
                 if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
+                if(document.getElementById('scanning').classList.contains('active')) renderScanTable();
                 
                 alert(`Bulk update successful! ${updatedCount} records updated.`);
                 event.target.value = ''; 
