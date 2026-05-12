@@ -170,22 +170,22 @@
                 <h2>2. Warehouse Receiving</h2>
                 
                 <div class="upload-box" style="text-align: left; background: #f8f9fa; margin-bottom: 20px; border-color: #bdc1c6;">
-                    <h3 style="margin-bottom: 10px;">Step A: Match Today's POD/OTP</h3>
+                    <h3 style="margin-bottom: 10px;">Step A: Select Delivery Date & (Optional) Match POD</h3>
                     <div style="display:flex; gap: 20px; align-items: flex-start;">
                         <div>
-                            <label style="font-size:12px; font-weight:bold;">Delivery Date:</label><br>
-                            <input type="date" id="podDate" style="margin-top:5px;">
+                            <label style="font-size:12px; font-weight:bold; color:#d93025;">Delivery Date (Required):</label><br>
+                            <input type="date" id="podDate" style="margin-top:5px; border: 2px solid #d93025; border-radius:4px; padding: 4px;">
                         </div>
                         <div>
-                            <label style="font-size:12px; font-weight:bold;">POD File (All types):</label><br>
+                            <label style="font-size:12px; font-weight:bold;">POD File (Optional):</label><br>
                             <input type="file" id="podFile" accept=".txt,.csv,.tsv,.pdf,.xlsx,.xls,image/*" style="margin-top:5px;">
                         </div>
                         <div style="flex-grow: 1;">
-                            <label style="font-size:12px; font-weight:bold;">AND/OR Paste Text:</label><br>
+                            <label style="font-size:12px; font-weight:bold;">AND/OR Paste Text (Optional):</label><br>
                             <textarea id="podText" rows="2" style="width:100%; margin-top:5px;" placeholder="Paste IDs here if uploading a PDF/Image..."></textarea>
                         </div>
                     </div>
-                    <button class="action-btn" style="margin-top:10px;" onclick="matchPodData()">Lock in Today's Deliveries</button>
+                    <button class="action-btn" style="margin-top:10px;" onclick="matchPodData()">Lock in Today's POD Deliveries</button>
                 </div>
 
                 <hr style="margin: 20px 0; border: 0; border-top: 1px solid #dadce0;">
@@ -481,7 +481,7 @@
 
     <script>
         // ==============================================
-        // FIREBASE INITIALIZATION (WITH YOUR NEW KEYS)
+        // FIREBASE INITIALIZATION 
         // ==============================================
         const firebaseConfig = {
           apiKey: "AIzaSyCfTzZ-s7JG7ONaWjlKSkrYrs6sDoaS-jw",
@@ -567,7 +567,7 @@
         function save() { localStorage.setItem('userCos', JSON.stringify(companies)); }
 
         // ==============================================
-        // DATA PERSISTENCE & CHUNKED CLOUD STORAGE
+        // DATA PERSISTENCE & CLOUD STORAGE
         // ==============================================
         async function loadData() {
             reportData = [];
@@ -953,7 +953,6 @@
 
                     if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
 
-                    // 🛑 SMART SYNC: Prevent duplicate writes to save Firebase quota
                     const existingUids = new Set(reportData.map(d => d.uid));
                     const newRecordsToUpload = validRecords.filter(record => !existingUids.has(record.uid));
 
@@ -1089,6 +1088,9 @@
             populateMS('ms-opt-scanDateSearch', [...aDate], 'filterScanTable');
         }
 
+        // ==============================================
+        // DIRECT PHYSICAL SCANNING ENHANCEMENT
+        // ==============================================
         function handleAutoScan(e) {
             const input = e.target;
             if(input.disabled) return;
@@ -1097,8 +1099,33 @@
                 const val = input.value.trim();
                 if (val.length < 5) return; 
 
-                const item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
                 const feedback = document.getElementById('scanFeedback');
+                const podDate = document.getElementById('podDate').value;
+
+                // Priority 1: Match what is already in "Pending Scan" (Matched by POD previously)
+                let item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
+                
+                // Priority 2: Direct Scan (Not matched by POD, but exists in DB as 'In Transit')
+                if (!item) {
+                    let transitItem = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'In Transit');
+                    if (transitItem) {
+                        if (!podDate) {
+                            input.classList.add('highlight-red');
+                            feedback.innerText = "⚠️ Please select a 'Delivery Date' above to scan new items!";
+                            feedback.style.color = "red";
+                            input.value = '';
+                            return;
+                        }
+                        
+                        // Automatically bring it into Pending Scan status
+                        transitItem.status = 'Pending Scan';
+                        transitItem.delDate = podDate;
+                        item = transitItem;
+                        
+                        // Immediately re-render the scan table to populate this new row so we can interact with it
+                        renderScanTable(); 
+                    }
+                }
 
                 if(item) {
                     input.disabled = true;
@@ -1109,13 +1136,15 @@
                     input.value = '';
                     
                     const row = document.getElementById(`row-${item.uid}`);
-                    row.classList.add('active-scan-row');
-                    document.getElementById('scanTableBody').prepend(row);
-                    
-                    document.getElementById(`cond-${item.uid}`).disabled = false;
-                    document.getElementById(`qty-${item.uid}`).disabled = false;
-                    document.getElementById(`saveBtn-${item.uid}`).disabled = false;
-                    document.getElementById(`cond-${item.uid}`).focus();
+                    if (row) {
+                        row.classList.add('active-scan-row');
+                        document.getElementById('scanTableBody').prepend(row);
+                        
+                        document.getElementById(`cond-${item.uid}`).disabled = false;
+                        document.getElementById(`qty-${item.uid}`).disabled = false;
+                        document.getElementById(`saveBtn-${item.uid}`).disabled = false;
+                        document.getElementById(`cond-${item.uid}`).focus();
+                    }
                 } else { 
                     input.classList.add('highlight-red'); 
                     feedback.innerText = `Not Found or Already Scanned: ${val}`;
@@ -1163,6 +1192,19 @@
         }
 
         // ==============================================
+        // UNIVERSAL DATE FILTER NORMALIZER
+        // ==============================================
+        // Helper to ensure 'Exact Date' filters work perfectly by stripping out 'T' and 'Time' components 
+        // from Amazon's native timestamps before comparing them to your UI calendar selections.
+        function normalizeDateStr(dStr) {
+            if (!dStr) return "";
+            let s = dStr.toString().trim();
+            if (s.includes('T')) s = s.split('T')[0];
+            else if (s.includes(' ')) s = s.split(' ')[0];
+            return s;
+        }
+
+        // ==============================================
         // 4. SAFETY CLAIMS
         // ==============================================
         function renderSafetyTable() {
@@ -1171,10 +1213,7 @@
 
             let claims = reportData.filter(d => {
                 if (d.status === 'In Transit' || d.status === 'Pending Scan') return false;
-                
-                // 🛑 BULLETPROOF CHECK: Hide if it has no condition (meaning it was never scanned)
                 if (!d.conditionLog || d.conditionLog.trim() === '') return false;
-                
                 if (d.conditionLog === 'Return Cancelled') return false; 
                 if (d.delDate) {
                     let dDate = new Date(d.delDate);
@@ -1296,11 +1335,17 @@
                         mDate = d[dateTarget] && d[dateTarget].trim() !== '';
                     }
                 } else {
+                    // FIXED DATE COMPARISON LOGIC
                     mDate = targetsToCheck.some(tgt => {
-                        const dVal = d[tgt] || "";
+                        let dVal = normalizeDateStr(d[tgt]);
                         if (!dVal) return false;
-                        if (dateType === 'exact' && dateExact) return (dVal === dateExact);
+                        
+                        if (dateType === 'exact') {
+                            if (!dateExact) return true; // Don't hide if nothing entered
+                            return (dVal === dateExact);
+                        }
                         if (dateType === 'range') {
+                            if (!dateStart && !dateEnd) return true;
                             if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
                             if (dateStart) return (dVal >= dateStart);
                             if (dateEnd) return (dVal <= dateEnd);
@@ -1562,11 +1607,17 @@
                         if (dateTarget === 'allTargets') return true;
                         return d[dateTarget] && d[dateTarget].trim() !== '';
                     } else {
+                        // FIXED DATE COMPARISON LOGIC
                         return targetsToCheck.some(tgt => {
-                            const dVal = d[tgt] || "";
+                            let dVal = normalizeDateStr(d[tgt]);
                             if (!dVal) return false;
-                            if (dateType === 'exact' && dateExact) return (dVal === dateExact);
+                            
+                            if (dateType === 'exact') {
+                                if (!dateExact) return true;
+                                return (dVal === dateExact);
+                            }
                             if (dateType === 'range') {
+                                if (!dateStart && !dateEnd) return true;
                                 if (dateStart && dateEnd) return (dVal >= dateStart && dVal <= dateEnd);
                                 if (dateStart) return (dVal >= dateStart);
                                 if (dateEnd) return (dVal <= dateEnd);
@@ -1659,7 +1710,7 @@
         }
 
         // ==============================================
-        // BULK IMPORT LOGIC
+        // BULK IMPORT LOGIC (CHANGED FIELDS ONLY)
         // ==============================================
         function parseCSVLine(text) {
             let ret = [], col = "", inQuote = false;
@@ -1692,9 +1743,7 @@
                     
                     const cols = parseCSVLine(line);
                     
-                    // Relaxed column check to allow for Excel stripping trailing empty cells
                     if(cols.length >= 7) { 
-                        // Helper to safely get columns without breaking if they are missing
                         const safeGet = (index) => cols.length > index ? cols[index].replace(/^"|"$/g, '').trim() : '';
 
                         const oid = safeGet(0);
@@ -1702,35 +1751,39 @@
                         
                         const tid = safeGet(2);
                         const sku = safeGet(4);
-                        
-                        const delDate = safeGet(6);
-                        const recQty = safeGet(10);
-                        const status = safeGet(11);
-                        const cond = safeGet(12);
-                        const cStatus = safeGet(13);
-                        const cid = safeGet(14);
-                        const cdate = safeGet(15);
-                        const amtRec = safeGet(16);
 
                         let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
                         if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
 
                         if(item) {
-                            item.delDate = delDate; 
+                            let changed = false;
                             
-                            // Only overwrite the later columns if Excel didn't truncate them out
-                            if (cols.length > 10) item.recQty = recQty; 
-                            if (cols.length > 11) item.status = status; 
-                            if (cols.length > 12) item.conditionLog = cond;
-                            if (cols.length > 13) item.claimStatus = cStatus; 
-                            if (cols.length > 14) item.claimId = cid; 
-                            if (cols.length > 15) item.claimDate = cdate;
-                            if (cols.length > 16) item.amtRec = amtRec;
+                            // Safe update logic: Only overwrite if the CSV value is actually different from the current saved value
+                            const maybeUpdate = (idx, key) => {
+                                if (cols.length > idx) {
+                                    let v = safeGet(idx);
+                                    if (v !== (item[key] || '')) {
+                                        item[key] = v;
+                                        changed = true;
+                                    }
+                                }
+                            };
+
+                            maybeUpdate(6, 'delDate');
+                            maybeUpdate(10, 'recQty');
+                            maybeUpdate(11, 'status');
+                            maybeUpdate(12, 'conditionLog');
+                            maybeUpdate(13, 'claimStatus');
+                            maybeUpdate(14, 'claimId');
+                            maybeUpdate(15, 'claimDate');
+                            maybeUpdate(16, 'amtRec');
                             
                             if (item.conditionLog === 'Saleable' && item.claimId !== '') {
                                 item.conditionLog = 'Fake';
+                                changed = true;
                             }
-                            updatedCount++;
+                            
+                            if (changed) updatedCount++;
                         }
                     }
                 }
@@ -1741,7 +1794,7 @@
                 if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
                 if(document.getElementById('scanning').classList.contains('active')) renderScanTable();
                 
-                alert(`Bulk update successful! ${updatedCount} records updated.`);
+                alert(`Bulk update successful! ${updatedCount} records were modified and saved.`);
                 event.target.value = ''; 
             };
             reader.readAsText(file);
