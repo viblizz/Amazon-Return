@@ -1335,13 +1335,12 @@
                         mDate = d[dateTarget] && d[dateTarget].trim() !== '';
                     }
                 } else {
-                    // FIXED DATE COMPARISON LOGIC
                     mDate = targetsToCheck.some(tgt => {
                         let dVal = normalizeDateStr(d[tgt]);
                         if (!dVal) return false;
                         
                         if (dateType === 'exact') {
-                            if (!dateExact) return true; // Don't hide if nothing entered
+                            if (!dateExact) return true; 
                             return (dVal === dateExact);
                         }
                         if (dateType === 'range') {
@@ -1607,7 +1606,6 @@
                         if (dateTarget === 'allTargets') return true;
                         return d[dateTarget] && d[dateTarget].trim() !== '';
                     } else {
-                        // FIXED DATE COMPARISON LOGIC
                         return targetsToCheck.some(tgt => {
                             let dVal = normalizeDateStr(d[tgt]);
                             if (!dVal) return false;
@@ -1752,31 +1750,49 @@
                         const tid = safeGet(2);
                         const sku = safeGet(4);
 
+                        // 1. ROBUST MATCHING: Excel often turns long Tracking IDs into scientific notation (e.g., 3.68934E+11), breaking exact matches.
+                        // We try precise matching first, but fallback to just Order ID if tracking ID is ruined.
                         let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
                         if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
+                        if (!item) item = reportData.find(d => d.orderId === oid && d.sku === sku);
+                        if (!item) item = reportData.find(d => d.orderId === oid);
 
                         if(item) {
                             let changed = false;
                             
-                            // Safe update logic: Only overwrite if the CSV value is actually different from the current saved value
-                            const maybeUpdate = (idx, key) => {
+                            const maybeUpdate = (idx, key, isDate = false) => {
                                 if (cols.length > idx) {
                                     let v = safeGet(idx);
-                                    if (v !== (item[key] || '')) {
+                                    
+                                    // 2. EXCEL DATE FIX: Convert "5/5/2026" back to standard "2026-05-05"
+                                    if (isDate && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+                                        let d = new Date(v);
+                                        if (!isNaN(d.getTime())) {
+                                            v = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                                        }
+                                    }
+                                    
+                                    if (v !== '' && v !== (item[key] || '')) {
                                         item[key] = v;
                                         changed = true;
                                     }
                                 }
                             };
 
-                            maybeUpdate(6, 'delDate');
+                            maybeUpdate(6, 'delDate', true);
                             maybeUpdate(10, 'recQty');
                             maybeUpdate(11, 'status');
                             maybeUpdate(12, 'conditionLog');
                             maybeUpdate(13, 'claimStatus');
                             maybeUpdate(14, 'claimId');
-                            maybeUpdate(15, 'claimDate');
+                            maybeUpdate(15, 'claimDate', true);
                             maybeUpdate(16, 'amtRec');
+                            
+                            // 3. AUTO-UPDATE STATUS: If they added a delivery date, but left status as 'In Transit', move it to Pending Scan
+                            if (item.delDate && item.status === 'In Transit') {
+                                item.status = 'Pending Scan';
+                                changed = true;
+                            }
                             
                             if (item.conditionLog === 'Saleable' && item.claimId !== '') {
                                 item.conditionLog = 'Fake';
