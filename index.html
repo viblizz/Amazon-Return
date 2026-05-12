@@ -194,7 +194,7 @@
                 <p id="scanLockWarning" style="color: #d93025; font-weight: bold; display: none; margin-bottom: 10px;">
                     ⚠️ SCANNER LOCKED. Complete the highlighted item below.
                 </p>
-                <input type="text" id="scanInput" class="scan-field" placeholder="Scan Tracking ID or Order ID..." autofocus>
+                <input type="text" id="scanInput" class="scan-field" placeholder="Scan Tracking ID or Order ID, then press Enter..." autofocus>
                 <p id="scanFeedback" style="font-weight: bold; margin-bottom: 10px;"></p>
                 
                 <table>
@@ -505,7 +505,6 @@
         ];
         let companies = JSON.parse(localStorage.getItem('userCos')) || DEFAULT_CO;
         let reportData = []; 
-        let scanTimer;
         let editingSafetyRows = []; 
         let currentCompany = ""; 
 
@@ -560,7 +559,8 @@
             });
 
             const scanInput = document.getElementById('scanInput');
-            if (scanInput) scanInput.addEventListener('input', handleAutoScan);
+            // Changed from 'input' to 'keydown' for the specific Enter key requirement
+            if (scanInput) scanInput.addEventListener('keydown', handleEnterScan);
         }
 
         function addNewCompany() { const n = prompt("Company Name:"); if(n) { companies.push({name:n, color:'#'+Math.floor(Math.random()*16777215).toString(16)}); save(); init(); } }
@@ -1089,69 +1089,72 @@
         }
 
         // ==============================================
-        // DIRECT PHYSICAL SCANNING ENHANCEMENT
+        // DIRECT PHYSICAL SCANNING ENHANCEMENT (ENTER KEY)
         // ==============================================
-        function handleAutoScan(e) {
+        function handleEnterScan(e) {
+            // Only proceed if the Enter key was pressed
+            if (e.key !== 'Enter') return;
+            
             const input = e.target;
             if(input.disabled) return;
-            clearTimeout(scanTimer);
-            scanTimer = setTimeout(() => {
-                const val = input.value.trim();
-                if (val.length < 5) return; 
+            
+            const val = input.value.trim();
+            if (val.length < 5) return; 
 
-                const feedback = document.getElementById('scanFeedback');
-                const podDate = document.getElementById('podDate').value;
+            const feedback = document.getElementById('scanFeedback');
+            const podDate = document.getElementById('podDate').value;
 
-                // Priority 1: Match what is already in "Pending Scan" (Matched by POD previously)
-                let item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
-                
-                // Priority 2: Direct Scan (Not matched by POD, but exists in DB as 'In Transit')
-                if (!item) {
-                    let transitItem = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'In Transit');
-                    if (transitItem) {
-                        if (!podDate) {
-                            input.classList.add('highlight-red');
-                            feedback.innerText = "⚠️ Please select a 'Delivery Date' above to scan new items!";
-                            feedback.style.color = "red";
-                            input.value = '';
-                            return;
-                        }
-                        
-                        // Automatically bring it into Pending Scan status
-                        transitItem.status = 'Pending Scan';
-                        transitItem.delDate = podDate;
-                        item = transitItem;
-                        
-                        // Immediately re-render the scan table to populate this new row so we can interact with it
-                        renderScanTable(); 
+            // Priority 1: Match what is already in "Pending Scan" (Matched by POD previously)
+            let item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
+            
+            // Priority 2: Direct Scan (Not matched by POD, but exists in DB as 'In Transit')
+            if (!item) {
+                let transitItem = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'In Transit');
+                if (transitItem) {
+                    if (!podDate) {
+                        input.classList.add('highlight-red');
+                        feedback.innerText = "⚠️ Please select a 'Delivery Date' above to scan new items!";
+                        feedback.style.color = "red";
+                        // We will clear the input so they can fix the date and scan again easily
+                        input.value = '';
+                        return;
                     }
-                }
-
-                if(item) {
-                    input.disabled = true;
-                    input.classList.add('scan-locked');
-                    document.getElementById('scanLockWarning').style.display = 'block';
-                    feedback.innerText = `Matched: ${item.trackingId}`;
-                    feedback.style.color = "green";
-                    input.value = '';
                     
-                    const row = document.getElementById(`row-${item.uid}`);
-                    if (row) {
-                        row.classList.add('active-scan-row');
-                        document.getElementById('scanTableBody').prepend(row);
-                        
-                        document.getElementById(`cond-${item.uid}`).disabled = false;
-                        document.getElementById(`qty-${item.uid}`).disabled = false;
-                        document.getElementById(`saveBtn-${item.uid}`).disabled = false;
-                        document.getElementById(`cond-${item.uid}`).focus();
-                    }
-                } else { 
-                    input.classList.add('highlight-red'); 
-                    feedback.innerText = `Not Found or Already Scanned: ${val}`;
-                    feedback.style.color = "red";
-                    input.value = ''; 
+                    // Automatically bring it into Pending Scan status
+                    transitItem.status = 'Pending Scan';
+                    transitItem.delDate = podDate;
+                    item = transitItem;
+                    
+                    // Immediately re-render the scan table to populate this new row so we can interact with it
+                    renderScanTable(); 
                 }
-            }, 150); 
+            }
+
+            if(item) {
+                input.disabled = true;
+                input.classList.remove('highlight-red');
+                input.classList.add('scan-locked');
+                document.getElementById('scanLockWarning').style.display = 'block';
+                feedback.innerText = `Matched: ${item.trackingId}`;
+                feedback.style.color = "green";
+                input.value = '';
+                
+                const row = document.getElementById(`row-${item.uid}`);
+                if (row) {
+                    row.classList.add('active-scan-row');
+                    document.getElementById('scanTableBody').prepend(row);
+                    
+                    document.getElementById(`cond-${item.uid}`).disabled = false;
+                    document.getElementById(`qty-${item.uid}`).disabled = false;
+                    document.getElementById(`saveBtn-${item.uid}`).disabled = false;
+                    document.getElementById(`cond-${item.uid}`).focus();
+                }
+            } else { 
+                input.classList.add('highlight-red'); 
+                feedback.innerText = `Not Found or Already Scanned: ${val}`;
+                feedback.style.color = "red";
+                input.value = ''; 
+            }
         }
 
         function logItem(uid) {
@@ -1194,8 +1197,6 @@
         // ==============================================
         // UNIVERSAL DATE FILTER NORMALIZER
         // ==============================================
-        // Helper to ensure 'Exact Date' filters work perfectly by stripping out 'T' and 'Time' components 
-        // from Amazon's native timestamps before comparing them to your UI calendar selections.
         function normalizeDateStr(dStr) {
             if (!dStr) return "";
             let s = dStr.toString().trim();
@@ -1425,25 +1426,62 @@
         }
 
         // ==============================================
-        // 5. AGING RETURNS 
+        // 5. AGING RETURNS (GROUPED LOGIC)
         // ==============================================
         function checkAging() {
             const body = document.getElementById('agingTableBody');
             body.innerHTML = '';
+            
+            // 1. Group data by OrderId + ASIN
+            const groups = {};
             reportData.forEach(d => {
-                if(d.reqDate) {
-                    const diff = Math.ceil((new Date() - new Date(d.reqDate)) / (1000*60*60*24));
-                    if(diff > 50 && (d.status === 'In Transit' || d.status === 'Pending Scan')) {
-                        body.innerHTML += `<tr>
-                            <td>${d.reqDate}</td>
-                            <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
+                if (!d.reqDate) return;
+                const key = d.orderId + "_" + d.asin;
+                if (!groups[key]) {
+                    groups[key] = { items: [], hasReceived: false, reqDate: d.reqDate, orderId: d.orderId, asin: d.asin };
+                }
+                groups[key].items.push(d);
+                
+                // If *any* tracking ID in this group is marked as Received (or otherwise processed), flag the entire group
+                if (d.status === 'Received' || d.status === 'Lost') {
+                     groups[key].hasReceived = true;
+                }
+            });
+
+            // 2. Evaluate groups and build the table
+            const agingRows = [];
+            Object.keys(groups).forEach(key => {
+                const group = groups[key];
+                
+                // Skip if any item in this Order+ASIN group is already received
+                if (group.hasReceived) return;
+
+                // Calculate the difference from the request date
+                const diff = Math.ceil((new Date() - new Date(group.reqDate)) / (1000*60*60*24));
+                
+                if(diff > 50) {
+                    const overdueItems = group.items.filter(d => d.status === 'In Transit' || d.status === 'Pending Scan');
+                    if (overdueItems.length > 0) {
+                        agingRows.push(`<tr>
+                            <td>${group.reqDate}</td>
+                            <td style="font-size:12px;">
+                                <b>${group.orderId}</b><br>
+                                ASIN: ${group.asin}<br>
+                                <span style="color:#666; font-size:10px;">(${overdueItems.length} Tracking IDs Pending)</span>
+                            </td>
                             <td style="color:red;"><b>${diff} Days</b></td>
                             <td><select onchange="this.closest('tr').lastChild.style.display=(this.value=='no'?'table-cell':'none')"><option value="no">❌ No</option><option value="yes">✅ Yes</option></select></td>
                             <td style="display:table-cell"><input type="text" placeholder="Case ID"><select><option>Pending</option><option>Approved</option></select></td>
-                        </tr>`;
+                        </tr>`);
                     }
                 }
             });
+
+            if (agingRows.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
+            } else {
+                body.innerHTML = agingRows.join('');
+            }
         }
 
         // ==============================================
@@ -1750,8 +1788,6 @@
                         const tid = safeGet(2);
                         const sku = safeGet(4);
 
-                        // 1. ROBUST MATCHING: Excel often turns long Tracking IDs into scientific notation (e.g., 3.68934E+11), breaking exact matches.
-                        // We try precise matching first, but fallback to just Order ID if tracking ID is ruined.
                         let item = reportData.find(d => d.orderId === oid && d.trackingId === tid && d.sku === sku);
                         if (!item) item = reportData.find(d => d.orderId === oid && d.trackingId === tid);
                         if (!item) item = reportData.find(d => d.orderId === oid && d.sku === sku);
@@ -1764,7 +1800,6 @@
                                 if (cols.length > idx) {
                                     let v = safeGet(idx);
                                     
-                                    // 2. EXCEL DATE FIX: Convert "5/5/2026" back to standard "2026-05-05"
                                     if (isDate && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
                                         let d = new Date(v);
                                         if (!isNaN(d.getTime())) {
@@ -1788,7 +1823,6 @@
                             maybeUpdate(15, 'claimDate', true);
                             maybeUpdate(16, 'amtRec');
                             
-                            // 3. AUTO-UPDATE STATUS: If they added a delivery date, but left status as 'In Transit', move it to Pending Scan
                             if (item.delDate && item.status === 'In Transit') {
                                 item.status = 'Pending Scan';
                                 changed = true;
