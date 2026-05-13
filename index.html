@@ -1026,7 +1026,8 @@
 
             let matchCount = 0;
             let overwrittenCount = 0;
-            let itemsToSave = new Set(); // To track unique items updated
+            let skippedCount = 0;
+            let itemsToSave = new Set(); 
 
             if (podFile) {
                 if(podFile.name.match(/\.(pdf|xlsx?|png|jpe?g)$/i)) {
@@ -1074,6 +1075,15 @@
                                         }
 
                                         if (itemToUpdate) {
+                                            
+                                            // --- NEW LOGIC: Skip if in safety claims and received ---
+                                            let inSafetyClaims = itemToUpdate.conditionLog && itemToUpdate.conditionLog.trim() !== '' && itemToUpdate.conditionLog !== 'Return Cancelled';
+                                            if (inSafetyClaims && itemToUpdate.status === 'Received') {
+                                                skippedCount++;
+                                                continue; // Skip this item completely
+                                            }
+                                            // --------------------------------------------------------
+
                                             // 3. Overwrite Tracking ID if it differs
                                             if (itemToUpdate.trackingId !== rowTid) {
                                                 itemToUpdate.trackingId = rowTid;
@@ -1101,6 +1111,17 @@
             if (podText.trim()) {
                 reportData.forEach(item => {
                     if(!item.trackingId || item.trackingId.trim() === '') return; 
+                    
+                    // --- NEW LOGIC: Skip if in safety claims and received ---
+                    let inSafetyClaims = item.conditionLog && item.conditionLog.trim() !== '' && item.conditionLog !== 'Return Cancelled';
+                    if (inSafetyClaims && item.status === 'Received') {
+                        if (podText.includes(item.trackingId) || podText.includes(item.orderId)) {
+                            skippedCount++;
+                        }
+                        return; // Skip this item completely
+                    }
+                    // --------------------------------------------------------
+
                     if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
                         item.delDate = podDate; 
                         if(item.status === 'In Transit') {
@@ -1112,7 +1133,9 @@
             }
             
             if(itemsToSave.size === 0) {
-                alert("No IDs matched the report, or matched IDs had blank Tracking Numbers.");
+                let msg = "No valid IDs matched the report, or matched IDs had blank Tracking Numbers.";
+                if (skippedCount > 0) msg += `\n\n(Skipped ${skippedCount} items because they were already received and processed in Safety Claims.)`;
+                alert(msg);
             } else {
                 saveData(); 
                 renderScanTable();
@@ -1120,6 +1143,7 @@
                 
                 let msg = `Matched ${itemsToSave.size} expected deliveries. The table below now shows ALL pending scans.`;
                 if (overwrittenCount > 0) msg += `\n✅ (Overwrote ${overwrittenCount} tracking IDs from the POD file)`;
+                if (skippedCount > 0) msg += `\n⏭️ (Skipped ${skippedCount} items already processed in Safety Claims)`;
                 alert(msg);
                 
                 document.getElementById('scanInput').focus();
