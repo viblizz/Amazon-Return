@@ -248,7 +248,7 @@
                                 </div>
                             </th>
                             <th style="width:200px; vertical-align: top;">
-                                <div style="margin-bottom:4px;">Order / Track / ASIN</div>
+                                <div style="margin-bottom:4px;">SKU / Order / Track / ASIN</div>
                                 <select id="safetySearchType" class="filter-input safety-filter" onchange="filterSafety();" style="margin-top:0; margin-bottom:4px;">
                                     <option value="orderId">Order ID</option>
                                     <option value="trackingId">Tracking ID</option>
@@ -559,7 +559,6 @@
             });
 
             const scanInput = document.getElementById('scanInput');
-            // Changed from 'input' to 'keydown' for the specific Enter key requirement
             if (scanInput) scanInput.addEventListener('keydown', handleEnterScan);
         }
 
@@ -953,20 +952,44 @@
 
                     if(validRecords.length === 0) throw new Error("No valid order data found in this file.");
 
-                    const existingUids = new Set(reportData.map(d => d.uid));
-                    const newRecordsToUpload = validRecords.filter(record => !existingUids.has(record.uid));
+                    const newRecordsToUpload = [];
+                    const recordsToUpdate = [];
 
-                    if (newRecordsToUpload.length === 0) {
-                        alert("Upload complete! No new records were found in this file, so 0 database quota was used.");
+                    validRecords.forEach(record => {
+                        // 1. If exact UID match already exists, skip entirely
+                        if (reportData.some(d => d.uid === record.uid)) return;
+
+                        // 2. Find existing record with same Order ID & ASIN but a BLANK tracking ID
+                        let existingBlankTrack = reportData.find(d => 
+                            d.orderId === record.orderId && 
+                            d.asin === record.asin && 
+                            (!d.trackingId || d.trackingId.trim() === '')
+                        );
+
+                        if (existingBlankTrack && record.trackingId.trim() !== '') {
+                            // 3. Overwrite the blank tracking ID with the new one
+                            existingBlankTrack.trackingId = record.trackingId;
+                            recordsToUpdate.push(existingBlankTrack);
+                        } else {
+                            // 4. Otherwise, it's a genuinely new record
+                            newRecordsToUpload.push(record);
+                        }
+                    });
+
+                    const allToSave = [...newRecordsToUpload, ...recordsToUpdate];
+
+                    if (allToSave.length === 0) {
+                        alert("Upload complete! No new records or tracking ID updates were found in this file.");
                         fileInput.value = ''; 
                         setCloudStatus('online');
                         return;
                     }
 
+                    // Push both new and updated records to Firebase Cloud
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
                     const chunkSize = 400; 
-                    for (let i = 0; i < newRecordsToUpload.length; i += chunkSize) {
-                        const chunk = newRecordsToUpload.slice(i, i + chunkSize);
+                    for (let i = 0; i < allToSave.length; i += chunkSize) {
+                        const chunk = allToSave.slice(i, i + chunkSize);
                         const batch = db.batch();
                         chunk.forEach(item => {
                             const docRef = collectionRef.doc(item.uid);
@@ -976,7 +999,7 @@
                     }
                     
                     await loadData();
-                    alert(`Success! Safely synced ${newRecordsToUpload.length} NEW records to your Cloud Master File!`);
+                    alert(`Success! Synced ${newRecordsToUpload.length} NEW records and updated ${recordsToUpdate.length} missing Tracking IDs in your Cloud Master File!`);
                     fileInput.value = ''; 
                     
                 } catch (err) {
@@ -1001,37 +1024,104 @@
             if (reportData.length === 0) return alert("Please wait for all-time data to load first.");
             if (!podDate) return alert("Select Delivery Date.");
 
+            let matchCount = 0;
+            let overwrittenCount = 0;
+            let itemsToSave = new Set(); // To track unique items updated
+
             if (podFile) {
                 if(podFile.name.match(/\.(pdf|xlsx?|png|jpe?g)$/i)) {
                     alert("⚠️ Please open the PDF/Excel/Image file on your computer, copy the Tracking IDs, and paste them into the text box.");
                     return;
-                } else {
+                } else if (podFile.name.match(/\.(csv|tsv|txt)$/i)) {
                     const fileText = await podFile.text();
-                    podText += " " + fileText;
+                    const lines = fileText.split('\n');
+                    
+                    if (lines.length > 0) {
+                        // Check if file is tab or comma separated
+                        const sep = lines[0].includes('\t') ? '\t' : ',';
+                        const headers = lines[0].toLowerCase().split(sep).map(h => h.replace(/^"|"$/g, '').trim());
+                        
+                        // Dynamically find correct columns based on your Excel sheet headers
+                        let oidIdx = headers.findIndex(h => h.includes('order id') || h.includes('orderid'));
+                        let tidIdx = headers.findIndex(h => h.includes('tracking'));
+                        let titleIdx = headers.findIndex(h => h.includes('product') || h.includes('title') || h.includes('asin') || h.includes('sku'));
+
+                        if (oidIdx !== -1 && tidIdx !== -1) {
+                            for (let i = 1; i < lines.length; i++) {
+                                if (!lines[i].trim()) continue;
+                                
+                                // Safely parse quotes if it's a CSV, otherwise basic split
+                                const cols = sep === ',' ? parseCSVLine(lines[i]) : lines[i].split(sep);
+                                
+                                let rowOid = cols[oidIdx] ? cols[oidIdx].replace(/^"|"$/g, '').trim() : "";
+                                let rowTid = cols[tidIdx] ? cols[tidIdx].replace(/^"|"$/g, '').trim() : "";
+                                let rowTitle = (titleIdx !== -1 && cols[titleIdx]) ? cols[titleIdx].replace(/^"|"$/g, '').trim() : "";
+                                
+                                if (rowOid && rowTid) {
+                                    // 1. Find matched order
+                                    let matches = reportData.filter(d => d.orderId === rowOid);
+                                    
+                                    if (matches.length > 0) {
+                                        // 2. Find specific item if the CSV product title contains the ASIN/SKU
+                                        let itemToUpdate = matches.find(d => 
+                                            (d.asin && rowTitle.includes(d.asin)) || 
+                                            (d.sku && rowTitle.includes(d.sku))
+                                        );
+                                        
+                                        // If product title doesn't perfectly match but it's the only item in the order, default to it
+                                        if (!itemToUpdate && matches.length === 1) {
+                                            itemToUpdate = matches[0];
+                                        }
+
+                                        if (itemToUpdate) {
+                                            // 3. Overwrite Tracking ID if it differs
+                                            if (itemToUpdate.trackingId !== rowTid) {
+                                                itemToUpdate.trackingId = rowTid;
+                                                overwrittenCount++;
+                                            }
+                                            
+                                            // Mark as arrived/Pending Scan
+                                            itemToUpdate.delDate = podDate;
+                                            if (itemToUpdate.status === 'In Transit') {
+                                                itemToUpdate.status = 'Pending Scan';
+                                            }
+                                            itemsToSave.add(itemToUpdate);
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            podText += " " + fileText; // Fallback to raw text scan if headers aren't found
+                        }
+                    }
                 }
             }
 
-            if (!podText.trim()) return alert("Upload a text file OR paste tracking text.");
-
-            let matchCount = 0;
-            reportData.forEach(item => {
-                if(!item.trackingId || item.trackingId.trim() === '') return; 
-                if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
-                    item.delDate = podDate; 
-                    if(item.status === 'In Transit') {
-                        item.status = 'Pending Scan'; 
+            // Fallback for pasted text or simple text files
+            if (podText.trim()) {
+                reportData.forEach(item => {
+                    if(!item.trackingId || item.trackingId.trim() === '') return; 
+                    if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
+                        item.delDate = podDate; 
+                        if(item.status === 'In Transit') {
+                            item.status = 'Pending Scan'; 
+                        }
+                        itemsToSave.add(item);
                     }
-                    matchCount++;
-                }
-            });
+                });
+            }
             
-            if(matchCount === 0) {
+            if(itemsToSave.size === 0) {
                 alert("No IDs matched the report, or matched IDs had blank Tracking Numbers.");
             } else {
                 saveData(); 
                 renderScanTable();
                 updateStats();
-                alert(`Matched ${matchCount} expected deliveries. The table below now shows ALL pending scans.`);
+                
+                let msg = `Matched ${itemsToSave.size} expected deliveries. The table below now shows ALL pending scans.`;
+                if (overwrittenCount > 0) msg += `\n✅ (Overwrote ${overwrittenCount} tracking IDs from the POD file)`;
+                alert(msg);
+                
                 document.getElementById('scanInput').focus();
             }
         }
@@ -1282,7 +1372,7 @@
 
                 return `<tr id="safety-row-${d.uid}" style="${rowColor}">
                     <td>${d.delDate||'-'}</td>
-                    <td style="font-size:12px;"><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
+                    <td style="font-size:12px;"><b>SKU: ${d.sku || '-'}</b><br><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
                     ${contentHtml}
                 </tr>`;
