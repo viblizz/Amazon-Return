@@ -75,6 +75,9 @@
         .ms-label { display: block; padding: 6px 8px; font-size: 12px; cursor: pointer; white-space: nowrap; font-weight:normal; }
         .ms-label:hover { background-color: #f1f3f4; }
         .ms-label input { margin-right: 6px; }
+        
+        .save-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #0f5132; animation: spin 1s ease-in-out infinite; margin-left:5px; vertical-align: middle; opacity: 0; transition: opacity 0.2s;}
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -344,7 +347,13 @@
                                 </div>
                         </div>
 
-                        <div style="flex: 1; min-width: 200px; border-left: 1px solid #ddd; padding-left: 20px;">
+                        <div style="flex: 1; min-width: 250px; border-left: 1px solid #ddd; padding-left: 20px;">
+                            <label style="font-size:12px; font-weight:bold;">Upload Payment File (Auto-Match):</label>
+                            <p style="font-size:10px; color:#666; margin-bottom:4px;">Matches Type (Refund/Reimbursement)</p>
+                            <input type="file" id="agingPaymentFile" accept=".csv,.txt,.tsv" onchange="processPaymentFile(event)" style="font-size:11px; margin-bottom: 10px;">
+                            
+                            <hr style="margin: 5px 0; border: 0; border-top: 1px solid #dadce0;">
+                            
                             <label style="font-size:12px; font-weight:bold;">Bulk Edit Selected:</label>
                             <div style="display:flex; gap:5px; margin-top:4px;">
                                 <select id="bulkAgingStatus" style="flex:1; border:1px solid #dadce0; padding:4px;">
@@ -362,13 +371,57 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:30px;"><input type="checkbox" onclick="toggleAllAging(this)"></th>
-                            <th>Req. Date</th>
-                            <th>Order ID & ASIN</th>
-                            <th>Days Overdue</th>
-                            <th>Detail Action</th>
-                            <th>Case Status & Reimbursed?</th>
-                            <th>Save</th>
+                            <th style="width:30px; vertical-align: top;"><input type="checkbox" onclick="toggleAllAging(this)"></th>
+                            <th style="width:120px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Req. Date</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-agDate')">Select...</div>
+                                    <div class="ms-content" id="ms-agDate">
+                                        <input type="text" class="ms-search" onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-agDate"></div>
+                                    </div>
+                                </div>
+                            </th>
+                            <th style="vertical-align: top;">
+                                <div style="margin-bottom:4px;">Order ID & ASIN</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-agOrder')">Select...</div>
+                                    <div class="ms-content" id="ms-agOrder">
+                                        <input type="text" class="ms-search" onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-agOrder"></div>
+                                    </div>
+                                </div>
+                            </th>
+                            <th style="width:120px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Days Overdue</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-agDays')">Select...</div>
+                                    <div class="ms-content" id="ms-agDays">
+                                        <input type="text" class="ms-search" onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-agDays"></div>
+                                    </div>
+                                </div>
+                            </th>
+                            <th style="width:180px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Detail Action</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-agAction')">Select...</div>
+                                    <div class="ms-content" id="ms-agAction">
+                                        <input type="text" class="ms-search" onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-agAction"></div>
+                                    </div>
+                                </div>
+                            </th>
+                            <th style="width:180px; vertical-align: top;">
+                                <div style="margin-bottom:4px;">Case Status / Reimb</div>
+                                <div class="ms-dropdown">
+                                    <div class="ms-btn" onclick="toggleMS('ms-agStatus')">Select...</div>
+                                    <div class="ms-content" id="ms-agStatus">
+                                        <input type="text" class="ms-search" onkeyup="filterMSLocal(this)">
+                                        <div class="ms-options" id="ms-opt-agStatus"></div>
+                                    </div>
+                                </div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="agingTableBody"></tbody>
@@ -549,7 +602,7 @@
         let currentCompany = ""; 
 
         // --- NEW DETAIL ACTION VARIABLES ---
-        let customAgingActions = JSON.parse(localStorage.getItem('agingActions')) || ["Filed SAFE-T", "Mailed Amazon", "Waiting on Buyer"];
+        let customAgingActions = JSON.parse(localStorage.getItem('agingActions')) || ["Filed SAFE-T", "Mailed Amazon", "Waiting on Buyer", "Reimbursed for lost", "Refund & Not Reimbursed ( 50d - 75d )"];
 
         function renderAgingActions() {
             const list = document.getElementById('agingActionList');
@@ -1701,21 +1754,34 @@
 
             // 2. Sorting Logic
             agingGroups.sort((a, b) => {
-                // First Priority: Highlighted searched items stick to top
+                // Priority 1: Highlighted searched items stick to top
                 if (a.isHighlighted && !b.isHighlighted) return -1;
                 if (!a.isHighlighted && b.isHighlighted) return 1;
 
-                // Second Priority: Approved items sink to the bottom automatically
+                // Priority 2: Approved items sink to the bottom automatically
                 if (a.agingStatus !== 'Approved' && b.agingStatus === 'Approved') return -1;
                 if (a.agingStatus === 'Approved' && b.agingStatus !== 'Approved') return 1;
 
-                // Third Priority: Highest Overdue Days first
+                // Priority 3: Items with an Action selected (but not approved) go to top
+                let aHasAction = a.agingAction && a.agingAction.trim() !== "";
+                let bHasAction = b.agingAction && b.agingAction.trim() !== "";
+                if (aHasAction && !bHasAction) return -1;
+                if (!aHasAction && bHasAction) return 1;
+
+                // Priority 4: 65 to 70 days overdue
+                let aIn65_70 = (a.diff >= 65 && a.diff <= 70);
+                let bIn65_70 = (b.diff >= 65 && b.diff <= 70);
+                if (aIn65_70 && !bIn65_70) return -1;
+                if (!aIn65_70 && bIn65_70) return 1;
+
+                // Priority 5: Highest Overdue Days first
                 return b.diff - a.diff;
             });
 
             // 3. Render HTML
             if (agingGroups.length === 0) {
-                body.innerHTML = `<tr><td colspan="7" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="6" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
+                filterAging();
                 return;
             }
 
@@ -1729,7 +1795,7 @@
                 const uids = group.items.map(d=>d.uid).join(','); // Collect all tracking IDs in this order
                 const elId = `${group.orderId}_${group.asin}`;
 
-                return `<tr style="${bg}">
+                return `<tr id="ag-row-${elId}" style="${bg}">
                     <td><input type="checkbox" class="aging-cb" value="${elId}" data-uids="${uids}"></td>
                     <td>${group.reqDate}</td>
                     <td style="font-size:12px;">
@@ -1739,38 +1805,127 @@
                     </td>
                     <td style="color:red; font-weight:bold;">${group.diff} Days</td>
                     <td>
-                        <select id="ag-act-${elId}" style="width:100%; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                        <select id="ag-act-${elId}" style="width:100%; padding:4px;" onchange="saveAgingRow('${elId}', '${uids}')">
                             ${actionOpts.replace(`value="${group.agingAction}"`, `value="${group.agingAction}" selected`)}
                         </select>
                     </td>
                     <td>
-                        <input type="text" id="ag-cid-${elId}" placeholder="Case ID" value="${group.agingCaseId}" style="width:90px; margin-bottom:4px;" onkeyup="markAgingUnsaved('${elId}')"><br>
-                        <select id="ag-status-${elId}" style="width:90px; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                        <input type="text" id="ag-cid-${elId}" placeholder="Case ID" value="${group.agingCaseId}" style="width:90px; margin-bottom:4px;" onchange="saveAgingRow('${elId}', '${uids}')"><br>
+                        <select id="ag-status-${elId}" style="width:90px; padding:4px;" onchange="saveAgingRow('${elId}', '${uids}')">
                             <option value="Pending" ${group.agingStatus==='Pending'?'selected':''}>Pending</option>
                             <option value="Approved" ${group.agingStatus==='Approved'?'selected':''}>Approved</option>
                         </select>
-                        <select id="ag-reimb-${elId}" style="width:70px; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                        <select id="ag-reimb-${elId}" style="width:70px; padding:4px;" onchange="saveAgingRow('${elId}', '${uids}')">
                             <option value="no" ${group.agingReimb==='no'?'selected':''}>❌ No</option>
                             <option value="yes" ${group.agingReimb==='yes'?'selected':''}>✅ Yes</option>
                         </select>
-                    </td>
-                    <td>
-                        <button id="ag-save-${elId}" class="save-btn" style="opacity:0.5; transition:0.3s;" onclick="saveAgingRow('${elId}', '${uids}')">Save</button>
+                        <span id="ag-spin-${elId}" class="save-spinner"></span>
                     </td>
                 </tr>`;
             }).join('');
+            
+            filterAging();
         }
 
-        // --- NEW SUPPORT FUNCTIONS ---
+        // --- PAYMENT FILE UPLOAD LOGIC ---
+        function processPaymentFile(event) {
+            const file = event.target.files[0];
+            if(!file) return;
 
-        // Visual indicator when a user changes a field but hasn't saved yet
-        function markAgingUnsaved(id) {
-            const btn = document.getElementById(`ag-save-${id}`);
-            if(btn) { btn.style.opacity = '1'; btn.style.boxShadow = '0 0 8px #0f5132'; }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const lines = e.target.result.split('\n');
+                
+                // Find Header Row dynamically
+                let hIdx = -1;
+                for(let i=0; i<Math.min(30, lines.length); i++) {
+                    if(lines[i] && lines[i].toLowerCase().includes('type') && lines[i].toLowerCase().includes('order id')) {
+                        hIdx = i; break;
+                    }
+                }
+                if(hIdx === -1) {
+                    alert("Could not find headers 'type' and 'order id' in the uploaded file.");
+                    event.target.value = '';
+                    return;
+                }
+                
+                const headers = parseCSVLine(lines[hIdx]).map(h=>h.toLowerCase());
+                const typeIdx = headers.findIndex(h => h === 'type' || h.includes('transaction type'));
+                const oidIdx = headers.findIndex(h => h === 'order id' || h === 'orderid');
+                const dateIdx = headers.findIndex(h => h === 'date/time' || h.includes('date'));
+
+                let orderMap = {}; // Will hold latest transaction per Order ID
+                
+                for(let i = hIdx + 1; i < lines.length; i++) {
+                    if(!lines[i].trim()) continue;
+                    const cols = parseCSVLine(lines[i]);
+                    if(cols.length <= Math.max(typeIdx, oidIdx)) continue;
+
+                    let oid = cols[oidIdx].trim();
+                    let type = cols[typeIdx].trim().toLowerCase();
+                    let dStr = dateIdx !== -1 ? cols[dateIdx].trim() : "";
+                    let dTime = dStr ? new Date(dStr).getTime() : 0;
+                    
+                    if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
+                        orderMap[oid] = { type: type, dTime: dTime };
+                    }
+                }
+
+                // Ensure custom actions exist for assignments
+                if(!customAgingActions.includes('Reimbursed for lost')) customAgingActions.push('Reimbursed for lost');
+                if(!customAgingActions.includes('Refund & Not Reimbursed ( 50d - 75d )')) customAgingActions.push('Refund & Not Reimbursed ( 50d - 75d )');
+                localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
+                renderAgingActions();
+
+                const batch = db.batch();
+                let updatedCount = 0;
+
+                Object.keys(orderMap).forEach(oid => {
+                    const info = orderMap[oid];
+                    let newAction = "";
+                    let newStatus = "";
+                    
+                    if (info.type.includes('reimbursement')) {
+                        newAction = "Reimbursed for lost";
+                        newStatus = "Approved";
+                    } else if (info.type.includes('refund')) {
+                        newAction = "Refund & Not Reimbursed ( 50d - 75d )";
+                    }
+
+                    if (newAction) {
+                        // Apply updates to any reportData items for this orderId
+                        let itemsToUpdate = reportData.filter(d => d.orderId === oid);
+                        itemsToUpdate.forEach(item => {
+                            item.agingAction = newAction;
+                            if(newStatus) item.agingStatus = newStatus;
+                            
+                            const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(item.uid);
+                            batch.set(docRef, { agingAction: item.agingAction, agingStatus: item.agingStatus }, { merge: true });
+                            updatedCount++;
+                        });
+                    }
+                });
+
+                if (updatedCount > 0) {
+                    setCloudStatus('syncing');
+                    await batch.commit().catch(e => console.error(e));
+                    setCloudStatus('online');
+                    alert(`Successfully processed file. Updated ${updatedCount} items automatically.`);
+                    checkAging();
+                } else {
+                    alert("No matching overdue 50+ day orders found to update from this payment file.");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
         }
 
-        // Saves individual row to Firebase
+        // --- AGING SUPPORT FUNCTIONS ---
+
         async function saveAgingRow(id, uidsStr) {
+            const spinner = document.getElementById(`ag-spin-${id}`);
+            if(spinner) spinner.style.opacity = '1';
+            
             const uids = uidsStr.split(',');
             const action = document.getElementById(`ag-act-${id}`).value;
             const caseId = document.getElementById(`ag-cid-${id}`).value;
@@ -1788,28 +1943,37 @@
                 }
             });
 
-            // Push to Firebase
-            setCloudStatus('syncing');
+            // Push to Firebase (Using SET with merge:true to fix cloud overwrite issues)
             try {
                 const batch = db.batch();
                 uids.forEach(uid => {
                     const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid);
-                    batch.update(docRef, { agingAction: action, agingCaseId: caseId, agingStatus: status, agingReimb: reimb });
+                    batch.set(docRef, { agingAction: action, agingCaseId: caseId, agingStatus: status, agingReimb: reimb }, { merge: true });
                 });
                 await batch.commit();
-                setCloudStatus('online');
                 
-                checkAging(); // Re-render to push approved items to bottom automatically
+                setTimeout(() => { if(spinner) spinner.style.opacity = '0'; }, 300);
+                
+                // If it was marked approved, re-render to send it to the bottom
+                if(status === 'Approved') {
+                    checkAging(); 
+                }
             } catch(e) {
                 console.error("Error saving aging:", e);
                 setCloudStatus('offline');
                 alert("Failed to save to cloud. Check connection.");
+                if(spinner) spinner.style.opacity = '0';
             }
         }
 
         // Check/Uncheck all
         function toggleAllAging(masterCb) {
-            document.querySelectorAll('.aging-cb').forEach(cb => cb.checked = masterCb.checked);
+            document.querySelectorAll('.aging-cb').forEach(cb => {
+                const tr = cb.closest('tr');
+                if(tr && tr.style.display !== 'none') {
+                    cb.checked = masterCb.checked;
+                }
+            });
         }
 
         // Process Bulk Checkboxes
@@ -1831,7 +1995,7 @@
                         if(item) {
                             item.agingStatus = status;
                             const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid);
-                            batch.update(docRef, { agingStatus: status });
+                            batch.set(docRef, { agingStatus: status }, { merge: true });
                         }
                     });
                 });
@@ -1847,6 +2011,65 @@
                 setCloudStatus('offline');
                 alert("Bulk edit failed.");
             }
+        }
+        
+        // --- AGING FILTERING ---
+        function filterAging() {
+            const dVals = getMSSelected('ms-opt-agDate');
+            const oVals = getMSSelected('ms-opt-agOrder');
+            const diffVals = getMSSelected('ms-opt-agDays');
+            const actVals = getMSSelected('ms-opt-agAction');
+            const statVals = getMSSelected('ms-opt-agStatus');
+            
+            const trs = document.getElementById("agingTableBody").getElementsByTagName("tr");
+            
+            let aDate = new Set(), aOrder = new Set(), aDiff = new Set(), aAct = new Set(), aStat = new Set();
+            
+            for(let i=0; i<trs.length; i++) {
+                const tr = trs[i];
+                if(!tr.id || !tr.id.startsWith("ag-row-")) continue;
+                
+                // Get row data
+                const tds = tr.getElementsByTagName("td");
+                if(tds.length < 6) continue;
+                
+                const dText = tds[1].innerText.trim().toUpperCase();
+                
+                const oFull = tds[2].innerText.toUpperCase();
+                const oidMatch = oFull.match(/(.*?)\nASIN:/);
+                const oText = oidMatch ? oidMatch[1].trim() : "";
+                
+                const diffText = tds[3].innerText.replace(' DAYS','').trim().toUpperCase();
+                
+                const actSel = tr.querySelector(`select[id^="ag-act-"]`);
+                const actText = (actSel ? actSel.value : "").toUpperCase();
+                
+                const statSel = tr.querySelector(`select[id^="ag-status-"]`);
+                const statText = (statSel ? statSel.value : "").toUpperCase();
+                
+                let md = dVals.length === 0 || dVals.includes(dText);
+                let mo = oVals.length === 0 || oVals.includes(oText);
+                let mdiff = diffVals.length === 0 || diffVals.includes(diffText);
+                let mact = actVals.length === 0 || actVals.includes(actText);
+                let mstat = statVals.length === 0 || statVals.includes(statText);
+                
+                if(md && mo && mdiff && mact && mstat) tr.style.display = "";
+                else tr.style.display = "none";
+                
+                if(md && mo && mdiff && mact && mstat) {
+                    if(dText) aDate.add(dText);
+                    if(oText) aOrder.add(oText);
+                    if(diffText) aDiff.add(diffText);
+                    if(actText) aAct.add(actText);
+                    if(statText) aStat.add(statText);
+                }
+            }
+            
+            populateMS('ms-opt-agDate', [...aDate], 'filterAging');
+            populateMS('ms-opt-agOrder', [...aOrder], 'filterAging');
+            populateMS('ms-opt-agDays', [...aDiff], 'filterAging');
+            populateMS('ms-opt-agAction', [...aAct], 'filterAging');
+            populateMS('ms-opt-agStatus', [...aStat], 'filterAging');
         }
 
         // ==============================================
