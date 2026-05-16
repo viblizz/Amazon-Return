@@ -320,18 +320,55 @@
             </div>
 
             <div id="aging" class="tab-pane">
-                <div style="display:flex; justify-content:space-between;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 15px;">
                     <h2>4. Returns > 50 Days (From Request Date)</h2>
                     <button class="action-btn" onclick="checkAging()">Refresh Aging</button>
                 </div>
+
+                <div style="background: #f8f9fa; padding: 15px; border: 1px solid #dadce0; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display:flex; gap: 20px; flex-wrap: wrap;">
+                        
+                        <div style="flex: 1; min-width: 250px;">
+                            <label style="font-size:12px; font-weight:bold;">Search / Highlight IDs:</label>
+                            <textarea id="agingSearchInput" rows="2" style="width:100%; border:1px solid #dadce0; border-radius:4px; padding:4px;" placeholder="Paste Order IDs or Tracking IDs..."></textarea>
+                            <button class="action-btn" style="padding: 4px 10px; font-size: 12px; margin-top:5px;" onclick="checkAging()">🔍 Search & Highlight</button>
+                        </div>
+
+                        <div style="flex: 1; min-width: 250px; border-left: 1px solid #ddd; padding-left: 20px;">
+                            <label style="font-size:12px; font-weight:bold;">Manage Detail Actions:</label>
+                            <div style="display:flex; gap:5px; margin-top:4px;">
+                                <input type="text" id="newActionInput" placeholder="New Action Name" style="flex:1; border:1px solid #dadce0; padding:4px;">
+                                <button class="action-btn" style="padding: 4px 10px;" onclick="addAgingAction()">Add</button>
+                            </div>
+                            <div id="agingActionList" style="margin-top: 8px; display:flex; gap:5px; flex-wrap:wrap; max-height:60px; overflow-y:auto;">
+                                </div>
+                        </div>
+
+                        <div style="flex: 1; min-width: 200px; border-left: 1px solid #ddd; padding-left: 20px;">
+                            <label style="font-size:12px; font-weight:bold;">Bulk Edit Selected:</label>
+                            <div style="display:flex; gap:5px; margin-top:4px;">
+                                <select id="bulkAgingStatus" style="flex:1; border:1px solid #dadce0; padding:4px;">
+                                    <option value="">- Select Status -</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Approved">Approved</option>
+                                </select>
+                                <button class="action-btn" style="padding: 4px 10px; background:#0F5132;" onclick="applyBulkAging()">Apply</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
                 <table>
                     <thead>
                         <tr>
+                            <th style="width:30px;"><input type="checkbox" onclick="toggleAllAging(this)"></th>
                             <th>Req. Date</th>
                             <th>Order ID & ASIN</th>
                             <th>Days Overdue</th>
-                            <th>Reimbursed?</th>
-                            <th>Case Status</th>
+                            <th>Detail Action</th>
+                            <th>Case Status & Reimbursed?</th>
+                            <th>Save</th>
                         </tr>
                     </thead>
                     <tbody id="agingTableBody"></tbody>
@@ -511,6 +548,37 @@
         let editingSafetyRows = []; 
         let currentCompany = ""; 
 
+        // --- NEW DETAIL ACTION VARIABLES ---
+        let customAgingActions = JSON.parse(localStorage.getItem('agingActions')) || ["Filed SAFE-T", "Mailed Amazon", "Waiting on Buyer"];
+
+        function renderAgingActions() {
+            const list = document.getElementById('agingActionList');
+            if(!list) return;
+            list.innerHTML = customAgingActions.map((act, i) => 
+                `<span style="background:#e8f0fe; color:#1a73e8; padding:2px 8px; border-radius:12px; font-size:11px; border:1px solid #c2e0ff; display:flex; align-items:center; gap:5px;">
+                    ${act} <span style="cursor:pointer; color:#d93025; font-weight:bold;" onclick="removeAgingAction(${i})">×</span>
+                </span>`
+            ).join('');
+        }
+
+        function addAgingAction() {
+            const val = document.getElementById('newActionInput').value.trim();
+            if(val && !customAgingActions.includes(val)) {
+                customAgingActions.push(val);
+                localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
+                document.getElementById('newActionInput').value = '';
+                renderAgingActions();
+                if(document.getElementById('aging').classList.contains('active')) checkAging(); 
+            }
+        }
+
+        function removeAgingAction(idx) {
+            customAgingActions.splice(idx, 1);
+            localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
+            renderAgingActions();
+            if(document.getElementById('aging').classList.contains('active')) checkAging();
+        }
+
         // ==============================================
         // CLOUD CONNECTION STATUS LOGIC
         // ==============================================
@@ -563,6 +631,8 @@
 
             const scanInput = document.getElementById('scanInput');
             if (scanInput) scanInput.addEventListener('keydown', handleEnterScan);
+
+            renderAgingActions();
         }
 
         function addNewCompany() { const n = prompt("Company Name:"); if(n) { companies.push({name:n, color:'#'+Math.floor(Math.random()*16777215).toString(16)}); save(); init(); } }
@@ -654,6 +724,7 @@
                         alert("Backup restored successfully! Loaded " + data.length + " records.");
                         if(document.getElementById('master').classList.contains('active')) renderMasterTable();
                         if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
+                        if(document.getElementById('aging').classList.contains('active')) checkAging(); 
                     } else {
                         alert("Invalid backup file format. Must be an array of records.");
                     }
@@ -687,6 +758,7 @@
                     if(document.getElementById('master').classList.contains('active')) renderMasterTable();
                     if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
                     if(document.getElementById('scanning').classList.contains('active')) renderScanTable();
+                    if(document.getElementById('aging').classList.contains('active')) checkAging();
                     
                     alert("Cloud data cleared.");
                     setCloudStatus(navigator.onLine ? 'online' : 'offline');
@@ -707,6 +779,7 @@
             if(id === 'scanning') { renderScanTable(); document.getElementById('scanInput').focus(); }
             if(id === 'master') { renderMasterTable(); }
             if(id === 'safety') { renderSafetyTable(); }
+            if(id === 'aging') { checkAging(); }
         }
 
         // ==============================================
@@ -1574,57 +1647,205 @@
         // ==============================================
         function checkAging() {
             const body = document.getElementById('agingTableBody');
-            body.innerHTML = '';
-            
+            const searchVal = document.getElementById('agingSearchInput').value.trim().toUpperCase();
+            // Split pasted IDs by spaces, commas, or newlines
+            const searchTokens = searchVal ? searchVal.split(/[\s,]+/).filter(Boolean) : [];
+
             // 1. Group data by OrderId + ASIN
             const groups = {};
             reportData.forEach(d => {
                 if (!d.reqDate) return;
                 const key = d.orderId + "_" + d.asin;
                 if (!groups[key]) {
-                    groups[key] = { items: [], hasReceived: false, reqDate: d.reqDate, orderId: d.orderId, asin: d.asin };
+                    groups[key] = { 
+                        items: [], 
+                        hasReceived: false, 
+                        reqDate: d.reqDate, 
+                        orderId: d.orderId, 
+                        asin: d.asin,
+                        // Pull existing data from Firebase
+                        agingAction: d.agingAction || "",
+                        agingStatus: d.agingStatus || "Pending",
+                        agingCaseId: d.agingCaseId || "",
+                        agingReimb: d.agingReimb || "no"
+                    };
                 }
                 groups[key].items.push(d);
-                
-                // If *any* tracking ID in this group is marked as Received (or otherwise processed), flag the entire group
-                if (d.status === 'Received' || d.status === 'Lost') {
-                     groups[key].hasReceived = true;
-                }
+                if (d.status === 'Received' || d.status === 'Lost') groups[key].hasReceived = true;
             });
 
-            // 2. Evaluate groups and build the table
-            const agingRows = [];
+            let agingGroups = [];
             Object.keys(groups).forEach(key => {
                 const group = groups[key];
-                
-                // Skip if any item in this Order+ASIN group is already received
-                if (group.hasReceived) return;
+                if (group.hasReceived) return; // Skip completed items
 
-                // Calculate the difference from the request date
                 const diff = Math.ceil((new Date() - new Date(group.reqDate)) / (1000*60*60*24));
-                
                 if(diff > 50) {
                     const overdueItems = group.items.filter(d => d.status === 'In Transit' || d.status === 'Pending Scan');
                     if (overdueItems.length > 0) {
-                        agingRows.push(`<tr>
-                            <td>${group.reqDate}</td>
-                            <td style="font-size:12px;">
-                                <b>${group.orderId}</b><br>
-                                ASIN: ${group.asin}<br>
-                                <span style="color:#666; font-size:10px;">(${overdueItems.length} Tracking IDs Pending)</span>
-                            </td>
-                            <td style="color:red;"><b>${diff} Days</b></td>
-                            <td><select onchange="this.closest('tr').lastChild.style.display=(this.value=='no'?'table-cell':'none')"><option value="no">❌ No</option><option value="yes">✅ Yes</option></select></td>
-                            <td style="display:table-cell"><input type="text" placeholder="Case ID"><select><option>Pending</option><option>Approved</option></select></td>
-                        </tr>`);
+                        group.diff = diff;
+                        group.overdueCount = overdueItems.length;
+                        
+                        // Check if it matches search IDs
+                        group.isHighlighted = false;
+                        if (searchTokens.length > 0) {
+                            group.isHighlighted = searchTokens.some(token => 
+                                group.orderId.toUpperCase().includes(token) || 
+                                group.items.some(item => (item.trackingId||"").toUpperCase().includes(token))
+                            );
+                        }
+                        agingGroups.push(group);
                     }
                 }
             });
 
-            if (agingRows.length === 0) {
-                body.innerHTML = `<tr><td colspan="5" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
-            } else {
-                body.innerHTML = agingRows.join('');
+            // 2. Sorting Logic
+            agingGroups.sort((a, b) => {
+                // First Priority: Highlighted searched items stick to top
+                if (a.isHighlighted && !b.isHighlighted) return -1;
+                if (!a.isHighlighted && b.isHighlighted) return 1;
+
+                // Second Priority: Approved items sink to the bottom automatically
+                if (a.agingStatus !== 'Approved' && b.agingStatus === 'Approved') return -1;
+                if (a.agingStatus === 'Approved' && b.agingStatus !== 'Approved') return 1;
+
+                // Third Priority: Highest Overdue Days first
+                return b.diff - a.diff;
+            });
+
+            // 3. Render HTML
+            if (agingGroups.length === 0) {
+                body.innerHTML = `<tr><td colspan="7" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
+                return;
+            }
+
+            const actionOpts = `<option value="">-Select Action-</option>` + customAgingActions.map(act => `<option value="${act}">${act}</option>`).join('');
+
+            body.innerHTML = agingGroups.map(group => {
+                // Apply styling based on state
+                const bg = group.isHighlighted ? 'background-color:#fff3cd; border: 2px solid #ffc107;' : 
+                          (group.agingStatus === 'Approved' ? 'background-color:#f1f3f4; opacity:0.8;' : '');
+                
+                const uids = group.items.map(d=>d.uid).join(','); // Collect all tracking IDs in this order
+                const elId = `${group.orderId}_${group.asin}`;
+
+                return `<tr style="${bg}">
+                    <td><input type="checkbox" class="aging-cb" value="${elId}" data-uids="${uids}"></td>
+                    <td>${group.reqDate}</td>
+                    <td style="font-size:12px;">
+                        <b>${group.orderId}</b><br>
+                        ASIN: ${group.asin}<br>
+                        <span style="color:#666; font-size:10px;">(${group.overdueCount} Tracking IDs Pending)</span>
+                    </td>
+                    <td style="color:red; font-weight:bold;">${group.diff} Days</td>
+                    <td>
+                        <select id="ag-act-${elId}" style="width:100%; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                            ${actionOpts.replace(`value="${group.agingAction}"`, `value="${group.agingAction}" selected`)}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" id="ag-cid-${elId}" placeholder="Case ID" value="${group.agingCaseId}" style="width:90px; margin-bottom:4px;" onkeyup="markAgingUnsaved('${elId}')"><br>
+                        <select id="ag-status-${elId}" style="width:90px; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                            <option value="Pending" ${group.agingStatus==='Pending'?'selected':''}>Pending</option>
+                            <option value="Approved" ${group.agingStatus==='Approved'?'selected':''}>Approved</option>
+                        </select>
+                        <select id="ag-reimb-${elId}" style="width:70px; padding:4px;" onchange="markAgingUnsaved('${elId}')">
+                            <option value="no" ${group.agingReimb==='no'?'selected':''}>❌ No</option>
+                            <option value="yes" ${group.agingReimb==='yes'?'selected':''}>✅ Yes</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button id="ag-save-${elId}" class="save-btn" style="opacity:0.5; transition:0.3s;" onclick="saveAgingRow('${elId}', '${uids}')">Save</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // --- NEW SUPPORT FUNCTIONS ---
+
+        // Visual indicator when a user changes a field but hasn't saved yet
+        function markAgingUnsaved(id) {
+            const btn = document.getElementById(`ag-save-${id}`);
+            if(btn) { btn.style.opacity = '1'; btn.style.boxShadow = '0 0 8px #0f5132'; }
+        }
+
+        // Saves individual row to Firebase
+        async function saveAgingRow(id, uidsStr) {
+            const uids = uidsStr.split(',');
+            const action = document.getElementById(`ag-act-${id}`).value;
+            const caseId = document.getElementById(`ag-cid-${id}`).value;
+            const status = document.getElementById(`ag-status-${id}`).value;
+            const reimb = document.getElementById(`ag-reimb-${id}`).value;
+
+            // Update local memory map
+            uids.forEach(uid => {
+                const item = reportData.find(d => d.uid === uid);
+                if(item) {
+                    item.agingAction = action;
+                    item.agingCaseId = caseId;
+                    item.agingStatus = status;
+                    item.agingReimb = reimb;
+                }
+            });
+
+            // Push to Firebase
+            setCloudStatus('syncing');
+            try {
+                const batch = db.batch();
+                uids.forEach(uid => {
+                    const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid);
+                    batch.update(docRef, { agingAction: action, agingCaseId: caseId, agingStatus: status, agingReimb: reimb });
+                });
+                await batch.commit();
+                setCloudStatus('online');
+                
+                checkAging(); // Re-render to push approved items to bottom automatically
+            } catch(e) {
+                console.error("Error saving aging:", e);
+                setCloudStatus('offline');
+                alert("Failed to save to cloud. Check connection.");
+            }
+        }
+
+        // Check/Uncheck all
+        function toggleAllAging(masterCb) {
+            document.querySelectorAll('.aging-cb').forEach(cb => cb.checked = masterCb.checked);
+        }
+
+        // Process Bulk Checkboxes
+        async function applyBulkAging() {
+            const status = document.getElementById('bulkAgingStatus').value;
+            if(!status) return alert("Select a status to bulk apply.");
+            
+            const checked = document.querySelectorAll('.aging-cb:checked');
+            if(checked.length === 0) return alert("Select at least one row using the checkboxes on the left.");
+
+            setCloudStatus('syncing');
+            try {
+                const batch = db.batch();
+                
+                checked.forEach(cb => {
+                    const uids = cb.getAttribute('data-uids').split(',');
+                    uids.forEach(uid => {
+                        const item = reportData.find(d => d.uid === uid);
+                        if(item) {
+                            item.agingStatus = status;
+                            const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid);
+                            batch.update(docRef, { agingStatus: status });
+                        }
+                    });
+                });
+                
+                await batch.commit();
+                setCloudStatus('online');
+                
+                checkAging(); // Re-render table
+                alert(`Successfully updated ${checked.length} orders to ${status}.`);
+                document.getElementById('bulkAgingStatus').value = ""; // Reset UI select
+            } catch(e) {
+                console.error("Bulk aging error:", e);
+                setCloudStatus('offline');
+                alert("Bulk edit failed.");
             }
         }
 
