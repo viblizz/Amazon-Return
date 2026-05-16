@@ -350,7 +350,10 @@
                         <div style="flex: 1; min-width: 250px; border-left: 1px solid #ddd; padding-left: 20px;">
                             <label style="font-size:12px; font-weight:bold;">Upload Payment File (Auto-Match):</label>
                             <p style="font-size:10px; color:#666; margin-bottom:4px;">Matches Type (Refund/Reimbursement)</p>
-                            <input type="file" id="agingPaymentFile" accept=".csv,.txt,.tsv" onchange="processPaymentFile(event)" style="font-size:11px; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                                <input type="file" id="agingPaymentFile" accept=".csv,.txt,.tsv" style="font-size:11px; max-width: 180px;">
+                                <button class="action-btn" style="padding: 4px 10px; font-size: 11px;" onclick="processPaymentFile()">Upload</button>
+                            </div>
                             
                             <hr style="margin: 5px 0; border: 0; border-top: 1px solid #dadce0;">
                             
@@ -1828,9 +1831,13 @@
         }
 
         // --- PAYMENT FILE UPLOAD LOGIC ---
-        function processPaymentFile(event) {
-            const file = event.target.files[0];
-            if(!file) return;
+        function processPaymentFile() {
+            const fileInput = document.getElementById('agingPaymentFile');
+            const file = fileInput.files[0];
+            if(!file) return alert("Please select a file to upload.");
+
+            // Show loading status
+            setCloudStatus('syncing');
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -1845,7 +1852,8 @@
                 }
                 if(hIdx === -1) {
                     alert("Could not find headers 'type' and 'order id' in the uploaded file.");
-                    event.target.value = '';
+                    fileInput.value = '';
+                    setCloudStatus('online');
                     return;
                 }
                 
@@ -1854,7 +1862,8 @@
                 const oidIdx = headers.findIndex(h => h === 'order id' || h === 'orderid');
                 const dateIdx = headers.findIndex(h => h === 'date/time' || h.includes('date'));
 
-                let orderMap = {}; // Will hold latest transaction per Order ID
+                let orderMap = {}; 
+                let refundReimbCount = 0;
                 
                 for(let i = hIdx + 1; i < lines.length; i++) {
                     if(!lines[i].trim()) continue;
@@ -1866,10 +1875,15 @@
                     let dStr = dateIdx !== -1 ? cols[dateIdx].trim() : "";
                     let dTime = dStr ? new Date(dStr).getTime() : 0;
                     
-                    if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
-                        orderMap[oid] = { type: type, dTime: dTime };
+                    if(type.includes('reimbursement') || type.includes('refund')) {
+                        // Keep the latest transaction for the order
+                        if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
+                            orderMap[oid] = { type: type, dTime: dTime };
+                        }
                     }
                 }
+
+                refundReimbCount = Object.keys(orderMap).length;
 
                 // Ensure custom actions exist for assignments
                 if(!customAgingActions.includes('Reimbursed for lost')) customAgingActions.push('Reimbursed for lost');
@@ -1879,43 +1893,70 @@
 
                 const batch = db.batch();
                 let updatedCount = 0;
+                let matchedOids = [];
 
                 Object.keys(orderMap).forEach(oid => {
                     const info = orderMap[oid];
                     let newAction = "";
                     let newStatus = "";
+                    let newReimb = "";
                     
                     if (info.type.includes('reimbursement')) {
                         newAction = "Reimbursed for lost";
                         newStatus = "Approved";
+                        newReimb = "yes";
                     } else if (info.type.includes('refund')) {
                         newAction = "Refund & Not Reimbursed ( 50d - 75d )";
+                        newReimb = "no";
                     }
 
                     if (newAction) {
-                        // Apply updates to any reportData items for this orderId
-                        let itemsToUpdate = reportData.filter(d => d.orderId === oid);
-                        itemsToUpdate.forEach(item => {
-                            item.agingAction = newAction;
-                            if(newStatus) item.agingStatus = newStatus;
-                            
-                            const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(item.uid);
-                            batch.set(docRef, { agingAction: item.agingAction, agingStatus: item.agingStatus }, { merge: true });
-                            updatedCount++;
+                        // Find matching items inside 50+ Days Aging criteria only
+                        let itemsToUpdate = reportData.filter(d => {
+                            if (d.orderId !== oid) return false;
+                            if (!d.reqDate) return false;
+                            if (d.status === 'Received' || d.status === 'Lost') return false; 
+                            const diff = Math.ceil((new Date() - new Date(d.reqDate)) / (1000*60*60*24));
+                            return diff > 50 && (d.status === 'In Transit' || d.status === 'Pending Scan');
                         });
+
+                        if (itemsToUpdate.length > 0) {
+                            matchedOids.push(oid);
+                            itemsToUpdate.forEach(item => {
+                                item.agingAction = newAction;
+                                if(newStatus) item.agingStatus = newStatus;
+                                if(newReimb) item.agingReimb = newReimb;
+                                
+                                const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(item.uid);
+                                batch.set(docRef, { 
+                                    agingAction: item.agingAction, 
+                                    agingStatus: item.agingStatus,
+                                    agingReimb: item.agingReimb 
+                                }, { merge: true });
+                                updatedCount++;
+                            });
+                        }
                     }
                 });
 
                 if (updatedCount > 0) {
-                    setCloudStatus('syncing');
                     await batch.commit().catch(e => console.error(e));
                     setCloudStatus('online');
-                    alert(`Successfully processed file. Updated ${updatedCount} items automatically.`);
                     checkAging();
+                    
+                    let msg = `✅ Upload Complete!\n\n`;
+                    msg += `📊 Found ${refundReimbCount} Refund/Reimbursement records in the file.\n`;
+                    msg += `🎯 Matched ${matchedOids.length} of those to your 50+ Days Aging list.\n`;
+                    msg += `🔄 Updated ${updatedCount} tracking IDs automatically.\n\n`;
+                    msg += `Matched Order IDs:\n${matchedOids.slice(0, 10).join(', ')}`;
+                    if(matchedOids.length > 10) msg += `\n...and ${matchedOids.length - 10} more.`;
+                    
+                    alert(msg);
                 } else {
-                    alert("No matching overdue 50+ day orders found to update from this payment file.");
+                    setCloudStatus('online');
+                    alert(`ℹ️ Upload Processed.\nFound ${refundReimbCount} Refund/Reimbursement records in the file, but NONE of them matched any active items currently in your 50+ Days Aging list.\n\n(They either haven't crossed 50 days yet, or have already been marked as Received/Lost).`);
                 }
-                event.target.value = '';
+                fileInput.value = '';
             };
             reader.readAsText(file);
         }
@@ -1954,10 +1995,8 @@
                 
                 setTimeout(() => { if(spinner) spinner.style.opacity = '0'; }, 300);
                 
-                // If it was marked approved, re-render to send it to the bottom
-                if(status === 'Approved') {
-                    checkAging(); 
-                }
+                // Re-render automatically to handle sorting priorities (approved dropping to bottom, etc)
+                checkAging(); 
             } catch(e) {
                 console.error("Error saving aging:", e);
                 setCloudStatus('offline');
