@@ -1831,6 +1831,22 @@
         }
 
         // --- PAYMENT FILE UPLOAD LOGIC ---
+        function parseCSVLine(text, sep = ',') {
+            let ret = [], col = "", inQuote = false;
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i];
+                if (inQuote) {
+                    if (c === '"') {
+                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
+                    } else { col += c; }
+                } else {
+                    if (c === '"') { inQuote = true; } else if (c === sep) { ret.push(col.trim()); col = ""; } else { col += c; }
+                }
+            }
+            ret.push(col.trim());
+            return ret;
+        }
+
         function processPaymentFile() {
             const fileInput = document.getElementById('agingPaymentFile');
             const file = fileInput.files[0];
@@ -1850,6 +1866,7 @@
                         hIdx = i; break;
                     }
                 }
+                
                 if(hIdx === -1) {
                     alert("Could not find headers 'type' and 'order id' in the uploaded file.");
                     fileInput.value = '';
@@ -1857,22 +1874,34 @@
                     return;
                 }
                 
-                const headers = parseCSVLine(lines[hIdx]).map(h=>h.toLowerCase());
+                const hLine = lines[hIdx].replace(/\r$/, '');
+                const sep = hLine.includes('\t') ? '\t' : ',';
+                const headers = parseCSVLine(hLine, sep).map(h=>h.toLowerCase());
+                
                 const typeIdx = headers.findIndex(h => h === 'type' || h.includes('transaction type'));
                 const oidIdx = headers.findIndex(h => h === 'order id' || h === 'orderid');
                 const dateIdx = headers.findIndex(h => h === 'date/time' || h.includes('date'));
+
+                if(typeIdx === -1 || oidIdx === -1) {
+                    alert("Could not properly read 'type' or 'order id' columns. Is the file formatted correctly?");
+                    fileInput.value = '';
+                    setCloudStatus('online');
+                    return;
+                }
 
                 let orderMap = {}; 
                 let refundReimbCount = 0;
                 
                 for(let i = hIdx + 1; i < lines.length; i++) {
-                    if(!lines[i].trim()) continue;
-                    const cols = parseCSVLine(lines[i]);
+                    let line = lines[i].replace(/\r$/, '');
+                    if(!line.trim()) continue;
+                    
+                    const cols = parseCSVLine(line, sep);
                     if(cols.length <= Math.max(typeIdx, oidIdx)) continue;
 
-                    let oid = cols[oidIdx].trim();
-                    let type = cols[typeIdx].trim().toLowerCase();
-                    let dStr = dateIdx !== -1 ? cols[dateIdx].trim() : "";
+                    let oid = (cols[oidIdx] || "").trim();
+                    let type = (cols[typeIdx] || "").trim().toLowerCase();
+                    let dStr = dateIdx !== -1 ? (cols[dateIdx] || "").trim() : "";
                     let dTime = dStr ? new Date(dStr).getTime() : 0;
                     
                     if(type.includes('reimbursement') || type.includes('refund')) {
@@ -1958,6 +1987,8 @@
                 }
                 fileInput.value = '';
             };
+            
+            reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); fileInput.value = ''; };
             reader.readAsText(file);
         }
 
