@@ -7,6 +7,7 @@
     
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }
@@ -329,8 +330,8 @@
                 <div style="display:flex; justify-content:space-between; margin-bottom: 15px;">
                     <h2>✉️ Claim Messages</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="action-btn" onclick="downloadTemplates()" style="background:#0F5132;">📥 Download Templates (.txt)</button>
-                        <input type="file" id="uploadTemplates" accept=".txt" style="display:none;" onchange="uploadTemplatesFile(event)">
+                        <button class="action-btn" onclick="downloadTemplates()" style="background:#0F5132;">📥 Download Templates (.doc)</button>
+                        <input type="file" id="uploadTemplates" accept=".doc,.docx,.txt" style="display:none;" onchange="uploadTemplatesFile(event)">
                         <button class="action-btn" onclick="document.getElementById('uploadTemplates').click()">📤 Update Templates</button>
                     </div>
                 </div>
@@ -348,10 +349,13 @@
                         </select>
                     </div>
                     <div style="flex:2;">
-                        <label style="font-size:12px; font-weight:bold;">2. Select Order ID:</label>
-                        <select id="msgOrderId" class="filter-input" style="margin-top:5px; padding:8px;">
-                            <option value="">- Waiting for Condition -</option>
-                        </select>
+                        <label style="font-size:12px; font-weight:bold;">2. Search / Select Order ID:</label>
+                        <div class="ms-dropdown" id="msgDropdownContainer" style="margin-top:5px;">
+                            <input type="text" id="msgOrderSearch" class="ms-btn" style="width:100%; padding:8px; text-align:left; border:1px solid #dadce0;" placeholder="Select Condition first..." onclick="toggleMsgDropdown()" onkeyup="filterMsgOrders(this)" readonly>
+                            <div class="ms-content" id="msgOrderOptions" style="max-height:300px;">
+                                </div>
+                            <input type="hidden" id="msgSelectedUid">
+                        </div>
                     </div>
                     <div style="flex:1;">
                         <button class="action-btn" style="width:100%; height:36px;" onclick="generateMessage()">Generate Message</button>
@@ -894,7 +898,10 @@
             if(id === 'aging') { checkAging(); }
             if(id === 'messages') { 
                 document.getElementById('msgCondition').value = ''; 
-                document.getElementById('msgOrderId').innerHTML = '<option value="">- Waiting for Condition -</option>'; 
+                document.getElementById('msgOrderSearch').value = '';
+                document.getElementById('msgOrderSearch').placeholder = 'Select Condition first...'; 
+                document.getElementById('msgOrderSearch').readOnly = true;
+                document.getElementById('msgSelectedUid').value = '';
                 document.getElementById('msgOutputArea').style.display = 'none'; 
             }
         }
@@ -910,7 +917,7 @@
         }
         function filterMSLocal(input) {
             const filter = input.value.toUpperCase();
-            const labels = input.nextElementSibling.getElementsByTagName('label');
+            const labels = input.nextElementSibling.children;
             for (let i = 0; i < labels.length; i++) {
                 const txtValue = labels[i].textContent || labels[i].innerText;
                 labels[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
@@ -1032,7 +1039,8 @@
                     <div class="stat-row"><span>Saleable:</span> <span class="stat-val" style="color:#0f5132">${condSaleable}</span></div>
                     <div class="stat-row"><span>Damaged:</span> <span class="stat-val" style="color:#d93025">${condDamaged}</span></div>
                     <div class="stat-row"><span>Different:</span> <span class="stat-val" style="color:#d93025">${condDifferent}</span></div>
-                    <div class="stat-row"><span>Missing Qty/Parts:</span> <span class="stat-val" style="color:#d93025">${condMissing + condMissingParts}</span></div>
+                    <div class="stat-row"><span>Missing Qty:</span> <span class="stat-val" style="color:#d93025">${condMissing}</span></div>
+                    <div class="stat-row"><span>Missing Parts:</span> <span class="stat-val" style="color:#d93025">${condMissingParts}</span></div>
                     <div class="stat-row"><span>Lost:</span> <span class="stat-val" style="color:#d93025">${condLost}</span></div>
                 </div>
 
@@ -1040,7 +1048,8 @@
                     <h3>🛡️ Claims Received</h3>
                     <div class="stat-row"><span>Damaged:</span> <span style="text-align:right;"><span class="stat-val">${cDamaged.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cDamaged.v)}</span></span></div>
                     <div class="stat-row"><span>Different:</span> <span style="text-align:right;"><span class="stat-val">${cDiff.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cDiff.v)}</span></span></div>
-                    <div class="stat-row"><span>Miss Qty/Parts:</span> <span style="text-align:right;"><span class="stat-val">${cMiss.c + cMissParts.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cMiss.v + cMissParts.v)}</span></span></div>
+                    <div class="stat-row"><span>Missing Qty:</span> <span style="text-align:right;"><span class="stat-val">${cMiss.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cMiss.v)}</span></span></div>
+                    <div class="stat-row"><span>Missing Parts:</span> <span style="text-align:right;"><span class="stat-val">${cMissParts.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cMissParts.v)}</span></span></div>
                     <div class="stat-row"><span>Lost:</span> <span style="text-align:right;"><span class="stat-val">${cLost.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cLost.v)}</span></span></div>
                     <div class="stat-row"><span>Fake:</span> <span style="text-align:right;"><span class="stat-val">${cFake.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cFake.v)}</span></span></div>
                 </div>
@@ -1049,7 +1058,8 @@
                     <h3>💰 Cost Price (50% Val)</h3>
                     <div class="stat-row"><span>Damaged:</span> <span class="stat-val">${formatAmt(cDamaged.cost)}</span></div>
                     <div class="stat-row"><span>Different:</span> <span class="stat-val">${formatAmt(cDiff.cost)}</span></div>
-                    <div class="stat-row"><span>Miss Qty/Parts:</span> <span class="stat-val">${formatAmt(cMiss.cost + cMissParts.cost)}</span></div>
+                    <div class="stat-row"><span>Missing Qty:</span> <span class="stat-val">${formatAmt(cMiss.cost)}</span></div>
+                    <div class="stat-row"><span>Missing Parts:</span> <span class="stat-val">${formatAmt(cMissParts.cost)}</span></div>
                     <div class="stat-row"><span>Lost:</span> <span class="stat-val">${formatAmt(cLost.cost)}</span></div>
                 </div>
 
@@ -1601,7 +1611,6 @@
             
             document.querySelectorAll('td[data-val] input[id^="amt-"]').forEach(el => calcSafety(el));
             filterSafety();
-            populateMsgOrderIds(); // Update message dropdown if conditions match
         }
 
         function toggleSafetySave(uid, cond) {
@@ -1748,67 +1757,107 @@
         // ==============================================
         // 3B. CLAIM MESSAGES
         // ==============================================
+        function toggleMsgDropdown() {
+            const input = document.getElementById('msgOrderSearch');
+            if(input.readOnly) return;
+            document.getElementById('msgOrderOptions').classList.toggle('show');
+        }
+
+        function filterMsgOrders(input) {
+            const filter = input.value.toUpperCase();
+            const divs = input.nextElementSibling.getElementsByTagName('div');
+            for (let i = 0; i < divs.length; i++) {
+                const txtValue = divs[i].textContent || divs[i].innerText;
+                divs[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+            }
+        }
+
+        function selectMsgOrder(uid, displayText) {
+            document.getElementById('msgSelectedUid').value = uid;
+            document.getElementById('msgOrderSearch').value = displayText;
+            document.getElementById('msgOrderOptions').classList.remove('show');
+            generateMessage();
+        }
+
         function populateMsgOrderIds() {
             const cond = document.getElementById('msgCondition').value;
-            const select = document.getElementById('msgOrderId');
-            select.innerHTML = '<option value="">- Select Order ID -</option>';
+            const searchInput = document.getElementById('msgOrderSearch');
+            const container = document.getElementById('msgOrderOptions');
+            
+            searchInput.value = '';
+            document.getElementById('msgSelectedUid').value = '';
+            container.innerHTML = '';
             
             if(!cond) {
-                select.innerHTML = '<option value="">- Waiting for Condition -</option>';
+                searchInput.placeholder = '- Select Condition first -';
+                searchInput.readOnly = true;
                 return;
             }
 
+            searchInput.placeholder = 'Type to search Order ID / Tracking...';
+            searchInput.readOnly = false;
+
             let pendingClaims = reportData.filter(d =>
-                d.claimStatus !== 'Approved' &&
-                d.claimStatus !== 'Denied' &&
-                d.conditionLog && d.conditionLog !== 'Saleable' && d.conditionLog !== 'Return Cancelled'
+                d.claimStatus !== 'Approved' && d.claimStatus !== 'Denied'
             );
 
-            let matchCond = cond;
-            if (cond === 'Lost') matchCond = 'Lost';
+            let matches = [];
+            if (cond === 'Lost') {
+                matches = reportData.filter(d => d.status === 'In Transit');
+            } else {
+                matches = pendingClaims.filter(d => d.conditionLog === cond);
+            }
 
-            let matches = pendingClaims.filter(d => {
-                if (cond === 'Missing Parts' && d.conditionLog === 'Missing Parts') return true;
-                if (cond === 'Different' && d.conditionLog === 'Different') return true;
-                if (cond === 'Missing Quantity' && d.conditionLog === 'Missing Quantity') return true;
-                if (cond === 'Damaged' && d.conditionLog === 'Damaged') return true;
-                if (cond === 'Lost' && d.conditionLog === 'Lost') return true;
-                return false;
-            });
+            let allSafetyClaims = reportData.filter(d =>
+                d.conditionLog && d.conditionLog !== 'Saleable' && d.conditionLog !== 'Return Cancelled' && d.claimStatus !== 'Approved' && d.claimStatus !== 'Denied'
+            );
 
-            let others = pendingClaims.filter(d => !matches.includes(d));
+            let matchUids = matches.map(m => m.uid);
+            let others = allSafetyClaims.filter(d => !matchUids.includes(d.uid));
 
             if (matches.length > 0) {
-                let optgroup = document.createElement('optgroup');
-                optgroup.label = `🔥 MATCHING CONDITION (${matches.length})`;
+                let header = document.createElement('div');
+                header.style.cssText = 'padding:6px 8px; background:#e8f0fe; color:#174ea6; font-size:11px; font-weight:bold;';
+                header.innerText = cond === 'Lost' ? `🔥 MATCHING: IN TRANSIT (${matches.length})` : `🔥 MATCHING CONDITION (${matches.length})`;
+                container.appendChild(header);
+
                 matches.forEach(d => {
-                    let opt = document.createElement('option');
-                    opt.value = d.uid;
-                    opt.innerText = `${d.orderId} - ${d.asin} (${d.conditionLog})`;
-                    optgroup.appendChild(opt);
+                    let div = document.createElement('div');
+                    div.className = 'ms-label';
+                    div.style.cssText = 'padding:8px; border-bottom:1px solid #eee; cursor:pointer;';
+                    div.innerHTML = `<b>${d.orderId}</b> <br><span style="font-size:10px; color:#555;">Trk: ${d.trackingId||'-'} | ASIN: ${d.asin} (${d.conditionLog || d.status})</span>`;
+                    div.onclick = () => selectMsgOrder(d.uid, d.orderId);
+                    container.appendChild(div);
                 });
-                select.appendChild(optgroup);
             }
 
             if (others.length > 0) {
-                let optgroup = document.createElement('optgroup');
-                optgroup.label = `📦 OTHER PENDING CLAIMS (${others.length})`;
+                let header = document.createElement('div');
+                header.style.cssText = 'padding:6px 8px; background:#f1f3f4; color:#5f6368; font-size:11px; font-weight:bold; margin-top:5px;';
+                header.innerText = `📦 OTHER PENDING CLAIMS (${others.length})`;
+                container.appendChild(header);
+
                 others.forEach(d => {
-                    let opt = document.createElement('option');
-                    opt.value = d.uid;
-                    opt.innerText = `${d.orderId} - ${d.asin} (${d.conditionLog})`;
-                    optgroup.appendChild(opt);
+                    let div = document.createElement('div');
+                    div.className = 'ms-label';
+                    div.style.cssText = 'padding:8px; border-bottom:1px solid #eee; cursor:pointer;';
+                    div.innerHTML = `<span style="color:#5f6368;">${d.orderId}</span> <br><span style="font-size:10px; color:#555;">Trk: ${d.trackingId||'-'} | ASIN: ${d.asin} (${d.conditionLog})</span>`;
+                    div.onclick = () => selectMsgOrder(d.uid, d.orderId);
+                    container.appendChild(div);
                 });
-                select.appendChild(optgroup);
+            }
+
+            if (matches.length === 0 && others.length === 0) {
+                container.innerHTML = '<div style="padding:10px; text-align:center; color:#666; font-size:12px;">No pending orders found.</div>';
             }
         }
 
         function generateMessage() {
-            const uid = document.getElementById('msgOrderId').value;
+            const uid = document.getElementById('msgSelectedUid').value;
             const cond = document.getElementById('msgCondition').value;
             
             if(!cond) return alert('Please select a Condition.');
-            if(!uid) return alert('Please select an Order ID.');
+            if(!uid) return alert('Please select an Order ID from the list.');
 
             const item = reportData.find(d => d.uid === uid);
             if(!item) return;
@@ -1835,45 +1884,75 @@
         }
 
         function downloadTemplates() {
-            let txtContent = "";
+            let content = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head><meta charset='utf-8'><title>Claim Templates</title></head><body>
+            `;
             for (const [cond, text] of Object.entries(userTemplates)) {
-                txtContent += `=== ${cond.toUpperCase()} ===\n${text}\n\n`;
+                content += `<h2>=== ${cond.toUpperCase()} ===</h2><p>${text.replace(/\n/g, '<br>')}</p><br>`;
             }
-            const blob = new Blob([txtContent], { type: "text/plain" });
-            const link = document.createElement("a");
+            content += "</body></html>";
+            
+            const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
+            const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = "Claim_Templates.txt";
+            link.download = 'Claim_Templates.doc';
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
             link.click();
+            document.body.removeChild(link);
         }
 
         function uploadTemplatesFile(event) {
             const file = event.target.files[0];
             if(!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const text = e.target.result;
-                const blocks = text.split(/===\s*(DAMAGED|DIFFERENT|MISSING QUANTITY|MISSING PARTS|LOST)\s*===/i);
-                
-                if (blocks.length > 2) {
-                    let newTpls = { ...userTemplates };
-                    for(let i=1; i<blocks.length; i+=2) {
-                        let key = blocks[i].toUpperCase();
-                        let val = blocks[i+1].trim();
-                        if (key === 'DAMAGED') newTpls["Damaged"] = val;
-                        else if (key === 'DIFFERENT') newTpls["Different"] = val;
-                        else if (key === 'MISSING QUANTITY') newTpls["Missing Quantity"] = val;
-                        else if (key === 'MISSING PARTS') newTpls["Missing Parts"] = val;
-                        else if (key === 'LOST') newTpls["Lost"] = val;
+
+            if (file.name.endsWith('.docx')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    mammoth.extractRawText({arrayBuffer: e.target.result})
+                        .then(function(result){
+                            parseTemplateText(result.value);
+                        })
+                        .catch(function(err){
+                            console.error(err);
+                            alert("Error parsing .docx file.");
+                        });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    let text = e.target.result;
+                    if (text.includes('<html')) {
+                        text = text.replace(/<br\s*[\/]?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '');
                     }
-                    userTemplates = newTpls;
-                    localStorage.setItem('claimTemplates', JSON.stringify(userTemplates));
-                    alert("Templates updated successfully!");
-                } else {
-                    alert("Could not parse file. Please ensure it maintains the '=== CONDITION ===' formatting. We recommend downloading the current templates, editing them, and uploading that same file.");
+                    parseTemplateText(text);
+                };
+                reader.readAsText(file);
+            }
+            event.target.value = '';
+        }
+
+        function parseTemplateText(text) {
+            const blocks = text.split(/===\s*(DAMAGED|DIFFERENT|MISSING QUANTITY|MISSING PARTS|LOST)\s*===/i);
+            if (blocks.length > 2) {
+                let newTpls = { ...userTemplates };
+                for(let i=1; i<blocks.length; i+=2) {
+                    let key = blocks[i].toUpperCase();
+                    let val = blocks[i+1].trim();
+                    if (key === 'DAMAGED') newTpls["Damaged"] = val;
+                    else if (key === 'DIFFERENT') newTpls["Different"] = val;
+                    else if (key === 'MISSING QUANTITY') newTpls["Missing Quantity"] = val;
+                    else if (key === 'MISSING PARTS') newTpls["Missing Parts"] = val;
+                    else if (key === 'LOST') newTpls["Lost"] = val;
                 }
-                event.target.value = '';
-            };
-            reader.readAsText(file);
+                userTemplates = newTpls;
+                localStorage.setItem('claimTemplates', JSON.stringify(userTemplates));
+                alert("Templates updated successfully!");
+            } else {
+                alert("Could not parse templates. Make sure to keep the '=== CONDITION ===' headings intact in the document.");
+            }
         }
 
         // ==============================================
@@ -2006,13 +2085,15 @@
                 
                 let hIdx = -1;
                 for(let i=0; i<Math.min(30, lines.length); i++) {
-                    if(lines[i] && lines[i].toLowerCase().includes('type') && lines[i].toLowerCase().includes('order id')) {
+                    const lowerLine = lines[i].toLowerCase();
+                    // Checking exactly for the start of the standard Amazon Unified header
+                    if(lowerLine.startsWith('"date/time"') || lowerLine.startsWith('date/time')) {
                         hIdx = i; break;
                     }
                 }
                 
                 if(hIdx === -1) {
-                    alert("Could not find headers 'type' and 'order id' in the uploaded file.");
+                    alert("Could not find header row starting with 'date/time' in the uploaded file.");
                     fileInput.value = '';
                     setCloudStatus('online');
                     return;
