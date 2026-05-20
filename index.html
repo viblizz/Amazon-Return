@@ -104,6 +104,7 @@
                 <button class="nav-btn active" onclick="switchTab('ingestion', this)">1. Data Ingestion</button>
                 <button class="nav-btn" onclick="switchTab('scanning', this)">2. Physical Scanning</button>
                 <button class="nav-btn" onclick="switchTab('safety', this)">3. Safety Claims</button>
+                <button class="nav-btn" onclick="switchTab('messages', this)">✉️ Claim Messages</button>
                 <button class="nav-btn" onclick="switchTab('aging', this)">4. 50+ Days Aging</button>
                 <hr style="border:0; border-top:1px solid #3c4043; margin: 15px 0;">
                 <button class="nav-btn" onclick="switchTab('master', this)">📋 Master File</button>
@@ -273,6 +274,7 @@
                                     <option value="Damaged">Damaged</option>
                                     <option value="Different">Different</option>
                                     <option value="Missing Quantity">Missing Quantity</option>
+                                    <option value="Missing Parts">Missing Parts</option>
                                     <option value="Lost">Lost</option>
                                 </select>
                             </th>
@@ -314,12 +316,53 @@
                                     <option value="Pending Claim">Pending</option>
                                     <option value="Under Review">Under Review</option>
                                     <option value="Approved">Approved</option>
+                                    <option value="Denied">Denied</option>
                                 </select>
                             </th>
                         </tr>
                     </thead>
                     <tbody id="safetyTableBody"></tbody>
                 </table>
+            </div>
+
+            <div id="messages" class="tab-pane">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 15px;">
+                    <h2>✉️ Claim Messages</h2>
+                    <div style="display:flex; gap:10px;">
+                        <button class="action-btn" onclick="downloadTemplates()" style="background:#0F5132;">📥 Download Templates (.txt)</button>
+                        <input type="file" id="uploadTemplates" accept=".txt" style="display:none;" onchange="uploadTemplatesFile(event)">
+                        <button class="action-btn" onclick="document.getElementById('uploadTemplates').click()">📤 Update Templates</button>
+                    </div>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 20px; border: 1px solid #dadce0; border-radius: 8px; display: flex; gap: 20px; align-items: flex-end;">
+                    <div style="flex:1;">
+                        <label style="font-size:12px; font-weight:bold;">1. Condition:</label>
+                        <select id="msgCondition" class="filter-input" onchange="populateMsgOrderIds()" style="margin-top:5px; padding:8px;">
+                            <option value="">- Select Condition -</option>
+                            <option value="Damaged">Damaged</option>
+                            <option value="Different">Different</option>
+                            <option value="Missing Quantity">Missing Qty</option>
+                            <option value="Missing Parts">Missing Parts</option>
+                            <option value="Lost">Didn't Receive (Lost)</option>
+                        </select>
+                    </div>
+                    <div style="flex:2;">
+                        <label style="font-size:12px; font-weight:bold;">2. Select Order ID:</label>
+                        <select id="msgOrderId" class="filter-input" style="margin-top:5px; padding:8px;">
+                            <option value="">- Waiting for Condition -</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <button class="action-btn" style="width:100%; height:36px;" onclick="generateMessage()">Generate Message</button>
+                    </div>
+                </div>
+
+                <div id="msgOutputArea" style="display:none; margin-top:20px; border:2px solid #1a73e8; padding:20px; border-radius:8px; background:#e8f0fe;">
+                    <h3 style="color:#174ea6; margin-bottom:10px;">Generated Message</h3>
+                    <textarea id="generatedMsgText" style="width:100%; height:200px; padding:15px; border:1px solid #c2e0ff; border-radius:4px; font-family:monospace; margin-bottom:15px; font-size:14px;"></textarea>
+                    <button class="action-btn" onclick="copyMsgToClipboard()">📋 Copy to Clipboard</button>
+                </div>
             </div>
 
             <div id="aging" class="tab-pane">
@@ -363,6 +406,7 @@
                                     <option value="">- Select Status -</option>
                                     <option value="Pending">Pending</option>
                                     <option value="Approved">Approved</option>
+                                    <option value="Denied">Denied</option>
                                 </select>
                                 <button class="action-btn" style="padding: 4px 10px; background:#0F5132;" onclick="applyBulkAging()">Apply</button>
                             </div>
@@ -529,6 +573,7 @@
                                     <option value="Damaged">Damaged</option>
                                     <option value="Different">Different</option>
                                     <option value="Missing Quantity">Missing Quantity</option>
+                                    <option value="Missing Parts">Missing Parts</option>
                                     <option value="Lost">Lost</option>
                                     <option value="Fake">Fake</option>
                                     <option value="Return Cancelled">Return Cancelled</option>
@@ -558,6 +603,7 @@
                                     <option value="Pending Claim">Pending</option>
                                     <option value="Under Review">Under Review</option>
                                     <option value="Approved">Approved</option>
+                                    <option value="Denied">Denied</option>
                                 </select>
                             </th>
                             
@@ -606,6 +652,16 @@
 
         // --- NEW DETAIL ACTION VARIABLES ---
         let customAgingActions = JSON.parse(localStorage.getItem('agingActions')) || ["Filed SAFE-T", "Mailed Amazon", "Waiting on Buyer", "Reimbursed for lost", "Refund & Not Reimbursed ( 50d - 75d )"];
+
+        // --- CLAIM MESSAGE TEMPLATES ---
+        let defaultClaimTemplates = {
+            "Damaged": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received the return for the above order, but the item is completely damaged and unsellable. We expected [EXP_QTY] in good condition. Please investigate and reimburse us for the damaged return.\n\nThank you.",
+            "Different": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received a return, but the buyer has returned a completely different product instead of our original item. Please issue a reimbursement for this fraudulent return.\n\nThank you.",
+            "Missing Quantity": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nThe buyer returned this order, but there is a quantity discrepancy. We shipped [EXP_QTY] units, but only received [REC_QTY] units back. Please reimburse us for the missing units.\n\nThank you.",
+            "Missing Parts": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received the return, but crucial parts/accessories are missing from the package, making the item unsellable. Please reimburse for the loss of value.\n\nThank you.",
+            "Lost": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nThe carrier tracking shows this return was processed, but we never received the physical package at our facility. Please investigate this lost return and issue a reimbursement.\n\nThank you."
+        };
+        let userTemplates = JSON.parse(localStorage.getItem('claimTemplates')) || defaultClaimTemplates;
 
         function renderAgingActions() {
             const list = document.getElementById('agingActionList');
@@ -836,6 +892,11 @@
             if(id === 'master') { renderMasterTable(); }
             if(id === 'safety') { renderSafetyTable(); }
             if(id === 'aging') { checkAging(); }
+            if(id === 'messages') { 
+                document.getElementById('msgCondition').value = ''; 
+                document.getElementById('msgOrderId').innerHTML = '<option value="">- Waiting for Condition -</option>'; 
+                document.getElementById('msgOutputArea').style.display = 'none'; 
+            }
         }
 
         // ==============================================
@@ -920,9 +981,9 @@
 
             let totalOrders = filteredData.length;
             let receivedOrders = 0, scannedOrders = 0, pendingOrders = 0;
-            let condSaleable = 0, condDamaged = 0, condDifferent = 0, condMissing = 0, condLost = 0;
+            let condSaleable = 0, condDamaged = 0, condDifferent = 0, condMissing = 0, condMissingParts = 0, condLost = 0;
             
-            let cDamaged = { c: 0, v: 0, cost: 0 }, cDiff = { c: 0, v: 0, cost: 0 }, cMiss = { c: 0, v: 0, cost: 0 }, cLost = { c: 0, v: 0, cost: 0 }, cFake = { c: 0, v: 0, cost: 0 };
+            let cDamaged = { c: 0, v: 0, cost: 0 }, cDiff = { c: 0, v: 0, cost: 0 }, cMiss = { c: 0, v: 0, cost: 0 }, cMissParts = { c: 0, v: 0, cost: 0 }, cLost = { c: 0, v: 0, cost: 0 }, cFake = { c: 0, v: 0, cost: 0 };
 
             filteredData.forEach(d => {
                 if (d.status === 'Received') receivedOrders++;
@@ -933,6 +994,7 @@
                 if (d.conditionLog === 'Damaged') condDamaged++;
                 if (d.conditionLog === 'Different') condDifferent++;
                 if (d.conditionLog === 'Missing Quantity') condMissing++;
+                if (d.conditionLog === 'Missing Parts') condMissingParts++;
                 if (d.conditionLog === 'Lost') condLost++;
 
                 let orderVal = parseFloat(d.oAmt) || 0;
@@ -942,12 +1004,13 @@
                 if (d.conditionLog === 'Damaged') { cDamaged.c++; cDamaged.v += amtRec; cDamaged.cost += costPrice; }
                 if (d.conditionLog === 'Different') { cDiff.c++; cDiff.v += amtRec; cDiff.cost += costPrice; }
                 if (d.conditionLog === 'Missing Quantity') { cMiss.c++; cMiss.v += amtRec; cMiss.cost += costPrice; }
+                if (d.conditionLog === 'Missing Parts') { cMissParts.c++; cMissParts.v += amtRec; cMissParts.cost += costPrice; }
                 if (d.conditionLog === 'Lost') { cLost.c++; cLost.v += amtRec; cLost.cost += costPrice; }
                 if (d.conditionLog === 'Fake') { cFake.c++; cFake.v += amtRec; } 
             });
 
-            let totalConditionCost = cDamaged.cost + cDiff.cost + cMiss.cost + cLost.cost; 
-            let totalClaimReceived = cDamaged.v + cDiff.v + cMiss.v + cLost.v + cFake.v;
+            let totalConditionCost = cDamaged.cost + cDiff.cost + cMiss.cost + cMissParts.cost + cLost.cost; 
+            let totalClaimReceived = cDamaged.v + cDiff.v + cMiss.v + cMissParts.v + cLost.v + cFake.v;
             let plAmount = totalClaimReceived - totalConditionCost;
             let plPercentage = totalConditionCost > 0 ? (plAmount / totalConditionCost) * 100 : 0;
             let plColor = plAmount >= 0 ? "#0f5132" : "#d93025"; 
@@ -969,7 +1032,7 @@
                     <div class="stat-row"><span>Saleable:</span> <span class="stat-val" style="color:#0f5132">${condSaleable}</span></div>
                     <div class="stat-row"><span>Damaged:</span> <span class="stat-val" style="color:#d93025">${condDamaged}</span></div>
                     <div class="stat-row"><span>Different:</span> <span class="stat-val" style="color:#d93025">${condDifferent}</span></div>
-                    <div class="stat-row"><span>Missing Qty:</span> <span class="stat-val" style="color:#d93025">${condMissing}</span></div>
+                    <div class="stat-row"><span>Missing Qty/Parts:</span> <span class="stat-val" style="color:#d93025">${condMissing + condMissingParts}</span></div>
                     <div class="stat-row"><span>Lost:</span> <span class="stat-val" style="color:#d93025">${condLost}</span></div>
                 </div>
 
@@ -977,7 +1040,7 @@
                     <h3>🛡️ Claims Received</h3>
                     <div class="stat-row"><span>Damaged:</span> <span style="text-align:right;"><span class="stat-val">${cDamaged.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cDamaged.v)}</span></span></div>
                     <div class="stat-row"><span>Different:</span> <span style="text-align:right;"><span class="stat-val">${cDiff.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cDiff.v)}</span></span></div>
-                    <div class="stat-row"><span>Missing Qty:</span> <span style="text-align:right;"><span class="stat-val">${cMiss.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cMiss.v)}</span></span></div>
+                    <div class="stat-row"><span>Miss Qty/Parts:</span> <span style="text-align:right;"><span class="stat-val">${cMiss.c + cMissParts.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cMiss.v + cMissParts.v)}</span></span></div>
                     <div class="stat-row"><span>Lost:</span> <span style="text-align:right;"><span class="stat-val">${cLost.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cLost.v)}</span></span></div>
                     <div class="stat-row"><span>Fake:</span> <span style="text-align:right;"><span class="stat-val">${cFake.c}</span><span class="stat-amt" style="color:#0f5132">${formatAmt(cFake.v)}</span></span></div>
                 </div>
@@ -986,7 +1049,7 @@
                     <h3>💰 Cost Price (50% Val)</h3>
                     <div class="stat-row"><span>Damaged:</span> <span class="stat-val">${formatAmt(cDamaged.cost)}</span></div>
                     <div class="stat-row"><span>Different:</span> <span class="stat-val">${formatAmt(cDiff.cost)}</span></div>
-                    <div class="stat-row"><span>Missing Qty:</span> <span class="stat-val">${formatAmt(cMiss.cost)}</span></div>
+                    <div class="stat-row"><span>Miss Qty/Parts:</span> <span class="stat-val">${formatAmt(cMiss.cost + cMissParts.cost)}</span></div>
                     <div class="stat-row"><span>Lost:</span> <span class="stat-val">${formatAmt(cLost.cost)}</span></div>
                 </div>
 
@@ -1088,10 +1151,8 @@
                     const recordsToUpdate = [];
 
                     validRecords.forEach(record => {
-                        // 1. If exact UID match already exists, skip entirely
                         if (reportData.some(d => d.uid === record.uid)) return;
 
-                        // 2. Find existing record with same Order ID & ASIN but a BLANK tracking ID
                         let existingBlankTrack = reportData.find(d => 
                             d.orderId === record.orderId && 
                             d.asin === record.asin && 
@@ -1099,11 +1160,9 @@
                         );
 
                         if (existingBlankTrack && record.trackingId.trim() !== '') {
-                            // 3. Overwrite the blank tracking ID with the new one
                             existingBlankTrack.trackingId = record.trackingId;
                             recordsToUpdate.push(existingBlankTrack);
                         } else {
-                            // 4. Otherwise, it's a genuinely new record
                             newRecordsToUpload.push(record);
                         }
                     });
@@ -1117,7 +1176,6 @@
                         return;
                     }
 
-                    // Push both new and updated records to Firebase Cloud
                     const collectionRef = db.collection('workspaces').doc(currentCompany).collection('returns');
                     const chunkSize = 400; 
                     for (let i = 0; i < allToSave.length; i += chunkSize) {
@@ -1170,11 +1228,9 @@
                     const lines = fileText.split('\n');
                     
                     if (lines.length > 0) {
-                        // Check if file is tab or comma separated
                         const sep = lines[0].includes('\t') ? '\t' : ',';
                         const headers = lines[0].toLowerCase().split(sep).map(h => h.replace(/^"|"$/g, '').trim());
                         
-                        // Dynamically find correct columns based on your Excel sheet headers
                         let oidIdx = headers.findIndex(h => h.includes('order id') || h.includes('orderid'));
                         let tidIdx = headers.findIndex(h => h.includes('tracking'));
                         let titleIdx = headers.findIndex(h => h.includes('product') || h.includes('title') || h.includes('asin') || h.includes('sku'));
@@ -1183,7 +1239,6 @@
                             for (let i = 1; i < lines.length; i++) {
                                 if (!lines[i].trim()) continue;
                                 
-                                // Safely parse quotes if it's a CSV, otherwise basic split
                                 const cols = sep === ',' ? parseCSVLine(lines[i]) : lines[i].split(sep);
                                 
                                 let rowOid = cols[oidIdx] ? cols[oidIdx].replace(/^"|"$/g, '').trim() : "";
@@ -1191,38 +1246,31 @@
                                 let rowTitle = (titleIdx !== -1 && cols[titleIdx]) ? cols[titleIdx].replace(/^"|"$/g, '').trim() : "";
                                 
                                 if (rowOid && rowTid) {
-                                    // 1. Find matched order
                                     let matches = reportData.filter(d => d.orderId === rowOid);
                                     
                                     if (matches.length > 0) {
-                                        // 2. Find specific item if the CSV product title contains the ASIN/SKU
                                         let itemToUpdate = matches.find(d => 
                                             (d.asin && rowTitle.includes(d.asin)) || 
                                             (d.sku && rowTitle.includes(d.sku))
                                         );
                                         
-                                        // If product title doesn't perfectly match but it's the only item in the order, default to it
                                         if (!itemToUpdate && matches.length === 1) {
                                             itemToUpdate = matches[0];
                                         }
 
                                         if (itemToUpdate) {
                                             
-                                            // --- NEW LOGIC: Skip if in safety claims and received ---
                                             let inSafetyClaims = itemToUpdate.conditionLog && itemToUpdate.conditionLog.trim() !== '' && itemToUpdate.conditionLog !== 'Return Cancelled';
                                             if (inSafetyClaims && itemToUpdate.status === 'Received') {
                                                 skippedCount++;
-                                                continue; // Skip this item completely
+                                                continue; 
                                             }
-                                            // --------------------------------------------------------
 
-                                            // 3. Overwrite Tracking ID if it differs
                                             if (itemToUpdate.trackingId !== rowTid) {
                                                 itemToUpdate.trackingId = rowTid;
                                                 overwrittenCount++;
                                             }
                                             
-                                            // Mark as arrived/Pending Scan
                                             itemToUpdate.delDate = podDate;
                                             if (itemToUpdate.status === 'In Transit') {
                                                 itemToUpdate.status = 'Pending Scan';
@@ -1233,26 +1281,23 @@
                                 }
                             }
                         } else {
-                            podText += " " + fileText; // Fallback to raw text scan if headers aren't found
+                            podText += " " + fileText; 
                         }
                     }
                 }
             }
 
-            // Fallback for pasted text or simple text files
             if (podText.trim()) {
                 reportData.forEach(item => {
                     if(!item.trackingId || item.trackingId.trim() === '') return; 
                     
-                    // --- NEW LOGIC: Skip if in safety claims and received ---
                     let inSafetyClaims = item.conditionLog && item.conditionLog.trim() !== '' && item.conditionLog !== 'Return Cancelled';
                     if (inSafetyClaims && item.status === 'Received') {
                         if (podText.includes(item.trackingId) || podText.includes(item.orderId)) {
                             skippedCount++;
                         }
-                        return; // Skip this item completely
+                        return; 
                     }
-                    // --------------------------------------------------------
 
                     if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
                         item.delDate = podDate; 
@@ -1269,7 +1314,6 @@
                 if (skippedCount > 0) msg += `\n\n(Skipped ${skippedCount} items because they were already received and processed in Safety Claims.)`;
                 alert(msg);
             } else {
-                // REDUCED QUOTA FIX: Update ONLY the specific POD matches in a batch
                 const batch = db.batch();
                 itemsToSave.forEach(item => {
                     const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(item.uid);
@@ -1310,6 +1354,7 @@
                             <option value="Damaged">Damaged</option>
                             <option value="Different">Different (Wrong Product)</option>
                             <option value="Missing Quantity">Missing Quantity (Less Qty)</option>
+                            <option value="Missing Parts">Missing Parts</option>
                             <option value="Lost">Lost (In POD, Not in Box)</option>
                         </select>
                     </td>
@@ -1345,11 +1390,7 @@
             populateMS('ms-opt-scanDateSearch', [...aDate], 'filterScanTable');
         }
 
-        // ==============================================
-        // DIRECT PHYSICAL SCANNING ENHANCEMENT (ENTER KEY)
-        // ==============================================
         function handleEnterScan(e) {
-            // Only proceed if the Enter key was pressed
             if (e.key !== 'Enter') return;
             
             const input = e.target;
@@ -1361,10 +1402,8 @@
             const feedback = document.getElementById('scanFeedback');
             const podDate = document.getElementById('podDate').value;
 
-            // Priority 1: Match what is already in "Pending Scan" (Matched by POD previously)
             let item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
             
-            // Priority 2: Direct Scan (Not matched by POD, but exists in DB as 'In Transit')
             if (!item) {
                 let transitItem = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'In Transit');
                 if (transitItem) {
@@ -1372,17 +1411,14 @@
                         input.classList.add('highlight-red');
                         feedback.innerText = "⚠️ Please select a 'Delivery Date' above to scan new items!";
                         feedback.style.color = "red";
-                        // We will clear the input so they can fix the date and scan again easily
                         input.value = '';
                         return;
                     }
                     
-                    // Automatically bring it into Pending Scan status
                     transitItem.status = 'Pending Scan';
                     transitItem.delDate = podDate;
                     item = transitItem;
                     
-                    // Immediately re-render the scan table to populate this new row so we can interact with it
                     renderScanTable(); 
                 }
             }
@@ -1436,7 +1472,6 @@
                 item.claimStatus = 'Pending Claim';
             }
             
-            // REDUCED QUOTA FIX: Update ONLY the specific scanned doc
             db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid).update({
                 conditionLog: item.conditionLog,
                 recQty: item.recQty,
@@ -1458,9 +1493,6 @@
             scanInput.focus(); 
         }
 
-        // ==============================================
-        // UNIVERSAL DATE FILTER NORMALIZER
-        // ==============================================
         function normalizeDateStr(dStr) {
             if (!dStr) return "";
             let s = dStr.toString().trim();
@@ -1470,7 +1502,7 @@
         }
 
         // ==============================================
-        // 4. SAFETY CLAIMS
+        // 3. SAFETY CLAIMS
         // ==============================================
         function renderSafetyTable() {
             const today = new Date();
@@ -1492,13 +1524,15 @@
             claims.sort((a,b) => {
                 if(a.claimStatus === 'Approved' && b.claimStatus !== 'Approved') return 1;
                 if(a.claimStatus !== 'Approved' && b.claimStatus === 'Approved') return -1;
+                if(a.claimStatus === 'Denied' && b.claimStatus !== 'Denied') return 1;
+                if(b.claimStatus === 'Denied' && a.claimStatus !== 'Denied') return -1;
                 if(a.claimStatus === 'Under Review' && b.claimStatus !== 'Under Review') return -1;
                 if(b.claimStatus === 'Under Review' && a.claimStatus !== 'Under Review') return 1;
                 return 0;
             });
 
             document.getElementById('safetyTableBody').innerHTML = claims.map(d => {
-                let rowColor = d.claimStatus === 'Under Review' ? 'background:#fff8e1;' : ''; 
+                let rowColor = d.claimStatus === 'Under Review' ? 'background:#fff8e1;' : (d.claimStatus === 'Denied' ? 'background:#fce8e6;' : ''); 
                 let isEditing = editingSafetyRows.includes(d.uid);
                 let contentHtml = '';
 
@@ -1511,6 +1545,18 @@
                         </td>
                         <td>
                             <span style="font-weight:bold; color:green;">Approved</span><br>
+                            <button onclick="editSafetyRow('${d.uid}')" class="edit-btn" style="margin-top:10px;">Edit</button>
+                        </td>
+                    `;
+                } else if (d.claimStatus === 'Denied' && !isEditing) {
+                    contentHtml = `
+                        <td><b>${d.claimId || '-'}</b><br>${d.claimDate || '-'}</td>
+                        <td data-val="${d.oAmt}">
+                            <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
+                            Amt Rec: <b>${d.amtRec || '0'}</b><br>Qty Rec: <b>${d.recQty || '0'}</b>
+                        </td>
+                        <td>
+                            <span style="font-weight:bold; color:red;">Denied</span><br>
                             <button onclick="editSafetyRow('${d.uid}')" class="edit-btn" style="margin-top:10px;">Edit</button>
                         </td>
                     `;
@@ -1535,6 +1581,7 @@
                                 <option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option>
                                 <option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Under Review</option>
                                 <option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option>
+                                <option value="Denied" ${d.claimStatus==='Denied'?'selected':''}>Denied</option>
                             </select><br>
                             <div id="safety-actions-${d.uid}" style="${hideActions}">
                                 <button onclick="saveClaim('${d.uid}')" class="save-btn">Save</button>
@@ -1554,6 +1601,7 @@
             
             document.querySelectorAll('td[data-val] input[id^="amt-"]').forEach(el => calcSafety(el));
             filterSafety();
+            populateMsgOrderIds(); // Update message dropdown if conditions match
         }
 
         function toggleSafetySave(uid, cond) {
@@ -1683,7 +1731,6 @@
 
             item.claimId = cid; item.claimDate = cdate; item.amtRec = amt; item.recQty = cqty; item.claimStatus = cstatus;
 
-            // REDUCED QUOTA FIX: Update ONLY the specific Claim doc
             db.collection('workspaces').doc(currentCompany).collection('returns').doc(uid).update({
                 claimId: item.claimId,
                 claimDate: item.claimDate,
@@ -1699,15 +1746,144 @@
         }
 
         // ==============================================
-        // 5. AGING RETURNS (GROUPED LOGIC)
+        // 3B. CLAIM MESSAGES
+        // ==============================================
+        function populateMsgOrderIds() {
+            const cond = document.getElementById('msgCondition').value;
+            const select = document.getElementById('msgOrderId');
+            select.innerHTML = '<option value="">- Select Order ID -</option>';
+            
+            if(!cond) {
+                select.innerHTML = '<option value="">- Waiting for Condition -</option>';
+                return;
+            }
+
+            let pendingClaims = reportData.filter(d =>
+                d.claimStatus !== 'Approved' &&
+                d.claimStatus !== 'Denied' &&
+                d.conditionLog && d.conditionLog !== 'Saleable' && d.conditionLog !== 'Return Cancelled'
+            );
+
+            let matchCond = cond;
+            if (cond === 'Lost') matchCond = 'Lost';
+
+            let matches = pendingClaims.filter(d => {
+                if (cond === 'Missing Parts' && d.conditionLog === 'Missing Parts') return true;
+                if (cond === 'Different' && d.conditionLog === 'Different') return true;
+                if (cond === 'Missing Quantity' && d.conditionLog === 'Missing Quantity') return true;
+                if (cond === 'Damaged' && d.conditionLog === 'Damaged') return true;
+                if (cond === 'Lost' && d.conditionLog === 'Lost') return true;
+                return false;
+            });
+
+            let others = pendingClaims.filter(d => !matches.includes(d));
+
+            if (matches.length > 0) {
+                let optgroup = document.createElement('optgroup');
+                optgroup.label = `🔥 MATCHING CONDITION (${matches.length})`;
+                matches.forEach(d => {
+                    let opt = document.createElement('option');
+                    opt.value = d.uid;
+                    opt.innerText = `${d.orderId} - ${d.asin} (${d.conditionLog})`;
+                    optgroup.appendChild(opt);
+                });
+                select.appendChild(optgroup);
+            }
+
+            if (others.length > 0) {
+                let optgroup = document.createElement('optgroup');
+                optgroup.label = `📦 OTHER PENDING CLAIMS (${others.length})`;
+                others.forEach(d => {
+                    let opt = document.createElement('option');
+                    opt.value = d.uid;
+                    opt.innerText = `${d.orderId} - ${d.asin} (${d.conditionLog})`;
+                    optgroup.appendChild(opt);
+                });
+                select.appendChild(optgroup);
+            }
+        }
+
+        function generateMessage() {
+            const uid = document.getElementById('msgOrderId').value;
+            const cond = document.getElementById('msgCondition').value;
+            
+            if(!cond) return alert('Please select a Condition.');
+            if(!uid) return alert('Please select an Order ID.');
+
+            const item = reportData.find(d => d.uid === uid);
+            if(!item) return;
+
+            let template = userTemplates[cond] || "";
+            let msg = template
+                .replace(/\[ORDER_ID\]/g, item.orderId || '')
+                .replace(/\[ASIN\]/g, item.asin || '')
+                .replace(/\[SKU\]/g, item.sku || '')
+                .replace(/\[TRACKING_ID\]/g, item.trackingId || '')
+                .replace(/\[EXP_QTY\]/g, item.oQty || '')
+                .replace(/\[REC_QTY\]/g, item.recQty || '')
+                .replace(/\[ORDER_AMT\]/g, item.oAmt || '');
+
+            document.getElementById('generatedMsgText').value = msg;
+            document.getElementById('msgOutputArea').style.display = 'block';
+        }
+
+        function copyMsgToClipboard() {
+            const txt = document.getElementById('generatedMsgText');
+            txt.select();
+            document.execCommand("copy");
+            alert("Message copied to clipboard!");
+        }
+
+        function downloadTemplates() {
+            let txtContent = "";
+            for (const [cond, text] of Object.entries(userTemplates)) {
+                txtContent += `=== ${cond.toUpperCase()} ===\n${text}\n\n`;
+            }
+            const blob = new Blob([txtContent], { type: "text/plain" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "Claim_Templates.txt";
+            link.click();
+        }
+
+        function uploadTemplatesFile(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                const blocks = text.split(/===\s*(DAMAGED|DIFFERENT|MISSING QUANTITY|MISSING PARTS|LOST)\s*===/i);
+                
+                if (blocks.length > 2) {
+                    let newTpls = { ...userTemplates };
+                    for(let i=1; i<blocks.length; i+=2) {
+                        let key = blocks[i].toUpperCase();
+                        let val = blocks[i+1].trim();
+                        if (key === 'DAMAGED') newTpls["Damaged"] = val;
+                        else if (key === 'DIFFERENT') newTpls["Different"] = val;
+                        else if (key === 'MISSING QUANTITY') newTpls["Missing Quantity"] = val;
+                        else if (key === 'MISSING PARTS') newTpls["Missing Parts"] = val;
+                        else if (key === 'LOST') newTpls["Lost"] = val;
+                    }
+                    userTemplates = newTpls;
+                    localStorage.setItem('claimTemplates', JSON.stringify(userTemplates));
+                    alert("Templates updated successfully!");
+                } else {
+                    alert("Could not parse file. Please ensure it maintains the '=== CONDITION ===' formatting. We recommend downloading the current templates, editing them, and uploading that same file.");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        // ==============================================
+        // 4. AGING RETURNS (GROUPED LOGIC)
         // ==============================================
         function checkAging() {
             const body = document.getElementById('agingTableBody');
             const searchVal = document.getElementById('agingSearchInput').value.trim().toUpperCase();
-            // Split pasted IDs by spaces, commas, or newlines
             const searchTokens = searchVal ? searchVal.split(/[\s,]+/).filter(Boolean) : [];
 
-            // 1. Group data by OrderId + ASIN
             const groups = {};
             reportData.forEach(d => {
                 if (!d.reqDate) return;
@@ -1719,7 +1895,6 @@
                         reqDate: d.reqDate, 
                         orderId: d.orderId, 
                         asin: d.asin,
-                        // Pull existing data from Firebase
                         agingAction: d.agingAction || "",
                         agingStatus: d.agingStatus || "Pending",
                         agingCaseId: d.agingCaseId || "",
@@ -1733,7 +1908,7 @@
             let agingGroups = [];
             Object.keys(groups).forEach(key => {
                 const group = groups[key];
-                if (group.hasReceived) return; // Skip completed items
+                if (group.hasReceived) return; 
 
                 const diff = Math.ceil((new Date() - new Date(group.reqDate)) / (1000*60*60*24));
                 if(diff > 50) {
@@ -1742,7 +1917,6 @@
                         group.diff = diff;
                         group.overdueCount = overdueItems.length;
                         
-                        // Check if it matches search IDs
                         group.isHighlighted = false;
                         if (searchTokens.length > 0) {
                             group.isHighlighted = searchTokens.some(token => 
@@ -1755,33 +1929,22 @@
                 }
             });
 
-            // 2. Sorting Logic
             agingGroups.sort((a, b) => {
-                // Priority 1: Highlighted searched items stick to top
                 if (a.isHighlighted && !b.isHighlighted) return -1;
                 if (!a.isHighlighted && b.isHighlighted) return 1;
-
-                // Priority 2: Approved items sink to the bottom automatically
                 if (a.agingStatus !== 'Approved' && b.agingStatus === 'Approved') return -1;
                 if (a.agingStatus === 'Approved' && b.agingStatus !== 'Approved') return 1;
-
-                // Priority 3: Items with an Action selected (but not approved) go to top
                 let aHasAction = a.agingAction && a.agingAction.trim() !== "";
                 let bHasAction = b.agingAction && b.agingAction.trim() !== "";
                 if (aHasAction && !bHasAction) return -1;
                 if (!aHasAction && bHasAction) return 1;
-
-                // Priority 4: 65 to 70 days overdue
                 let aIn65_70 = (a.diff >= 65 && a.diff <= 70);
                 let bIn65_70 = (b.diff >= 65 && b.diff <= 70);
                 if (aIn65_70 && !bIn65_70) return -1;
                 if (!aIn65_70 && bIn65_70) return 1;
-
-                // Priority 5: Highest Overdue Days first
                 return b.diff - a.diff;
             });
 
-            // 3. Render HTML
             if (agingGroups.length === 0) {
                 body.innerHTML = `<tr><td colspan="6" style="text-align:center;">No returns over 50 days pending.</td></tr>`;
                 filterAging();
@@ -1791,11 +1954,10 @@
             const actionOpts = `<option value="">-Select Action-</option>` + customAgingActions.map(act => `<option value="${act}">${act}</option>`).join('');
 
             body.innerHTML = agingGroups.map(group => {
-                // Apply styling based on state
                 const bg = group.isHighlighted ? 'background-color:#fff3cd; border: 2px solid #ffc107;' : 
                           (group.agingStatus === 'Approved' ? 'background-color:#f1f3f4; opacity:0.8;' : '');
                 
-                const uids = group.items.map(d=>d.uid).join(','); // Collect all tracking IDs in this order
+                const uids = group.items.map(d=>d.uid).join(','); 
                 const elId = `${group.orderId}_${group.asin}`;
 
                 return `<tr id="ag-row-${elId}" style="${bg}">
@@ -1817,6 +1979,7 @@
                         <select id="ag-status-${elId}" style="width:90px; padding:4px;" onchange="saveAgingRow('${elId}', '${uids}')">
                             <option value="Pending" ${group.agingStatus==='Pending'?'selected':''}>Pending</option>
                             <option value="Approved" ${group.agingStatus==='Approved'?'selected':''}>Approved</option>
+                            <option value="Denied" ${group.agingStatus==='Denied'?'selected':''}>Denied</option>
                         </select>
                         <select id="ag-reimb-${elId}" style="width:70px; padding:4px;" onchange="saveAgingRow('${elId}', '${uids}')">
                             <option value="no" ${group.agingReimb==='no'?'selected':''}>❌ No</option>
@@ -1830,36 +1993,17 @@
             filterAging();
         }
 
-        // --- PAYMENT FILE UPLOAD LOGIC ---
-        function parseCSVLine(text, sep = ',') {
-            let ret = [], col = "", inQuote = false;
-            for (let i = 0; i < text.length; i++) {
-                let c = text[i];
-                if (inQuote) {
-                    if (c === '"') {
-                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
-                    } else { col += c; }
-                } else {
-                    if (c === '"') { inQuote = true; } else if (c === sep) { ret.push(col.trim()); col = ""; } else { col += c; }
-                }
-            }
-            ret.push(col.trim());
-            return ret;
-        }
-
         function processPaymentFile() {
             const fileInput = document.getElementById('agingPaymentFile');
             const file = fileInput.files[0];
             if(!file) return alert("Please select a file to upload.");
 
-            // Show loading status
             setCloudStatus('syncing');
 
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const lines = e.target.result.split('\n');
                 
-                // Find Header Row dynamically
                 let hIdx = -1;
                 for(let i=0; i<Math.min(30, lines.length); i++) {
                     if(lines[i] && lines[i].toLowerCase().includes('type') && lines[i].toLowerCase().includes('order id')) {
@@ -1905,7 +2049,6 @@
                     let dTime = dStr ? new Date(dStr).getTime() : 0;
                     
                     if(type.includes('reimbursement') || type.includes('refund')) {
-                        // Keep the latest transaction for the order
                         if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
                             orderMap[oid] = { type: type, dTime: dTime };
                         }
@@ -1914,7 +2057,6 @@
 
                 refundReimbCount = Object.keys(orderMap).length;
 
-                // Ensure custom actions exist for assignments
                 if(!customAgingActions.includes('Reimbursed for lost')) customAgingActions.push('Reimbursed for lost');
                 if(!customAgingActions.includes('Refund & Not Reimbursed ( 50d - 75d )')) customAgingActions.push('Refund & Not Reimbursed ( 50d - 75d )');
                 localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
@@ -1940,7 +2082,6 @@
                     }
 
                     if (newAction) {
-                        // Find matching items inside 50+ Days Aging criteria only
                         let itemsToUpdate = reportData.filter(d => {
                             if (d.orderId !== oid) return false;
                             if (!d.reqDate) return false;
@@ -1992,8 +2133,6 @@
             reader.readAsText(file);
         }
 
-        // --- AGING SUPPORT FUNCTIONS ---
-
         async function saveAgingRow(id, uidsStr) {
             const spinner = document.getElementById(`ag-spin-${id}`);
             if(spinner) spinner.style.opacity = '1';
@@ -2004,7 +2143,6 @@
             const status = document.getElementById(`ag-status-${id}`).value;
             const reimb = document.getElementById(`ag-reimb-${id}`).value;
 
-            // Update local memory map
             uids.forEach(uid => {
                 const item = reportData.find(d => d.uid === uid);
                 if(item) {
@@ -2015,7 +2153,6 @@
                 }
             });
 
-            // Push to Firebase (Using SET with merge:true to fix cloud overwrite issues)
             try {
                 const batch = db.batch();
                 uids.forEach(uid => {
@@ -2025,8 +2162,6 @@
                 await batch.commit();
                 
                 setTimeout(() => { if(spinner) spinner.style.opacity = '0'; }, 300);
-                
-                // Re-render automatically to handle sorting priorities (approved dropping to bottom, etc)
                 checkAging(); 
             } catch(e) {
                 console.error("Error saving aging:", e);
@@ -2036,7 +2171,6 @@
             }
         }
 
-        // Check/Uncheck all
         function toggleAllAging(masterCb) {
             document.querySelectorAll('.aging-cb').forEach(cb => {
                 const tr = cb.closest('tr');
@@ -2046,7 +2180,6 @@
             });
         }
 
-        // Process Bulk Checkboxes
         async function applyBulkAging() {
             const status = document.getElementById('bulkAgingStatus').value;
             if(!status) return alert("Select a status to bulk apply.");
@@ -2073,9 +2206,9 @@
                 await batch.commit();
                 setCloudStatus('online');
                 
-                checkAging(); // Re-render table
+                checkAging(); 
                 alert(`Successfully updated ${checked.length} orders to ${status}.`);
-                document.getElementById('bulkAgingStatus').value = ""; // Reset UI select
+                document.getElementById('bulkAgingStatus').value = ""; 
             } catch(e) {
                 console.error("Bulk aging error:", e);
                 setCloudStatus('offline');
@@ -2083,7 +2216,6 @@
             }
         }
         
-        // --- AGING FILTERING ---
         function filterAging() {
             const dVals = getMSSelected('ms-opt-agDate');
             const oVals = getMSSelected('ms-opt-agOrder');
@@ -2099,7 +2231,6 @@
                 const tr = trs[i];
                 if(!tr.id || !tr.id.startsWith("ag-row-")) continue;
                 
-                // Get row data
                 const tds = tr.getElementsByTagName("td");
                 if(tds.length < 6) continue;
                 
@@ -2143,7 +2274,7 @@
         }
 
         // ==============================================
-        // 6. MASTER FILE 
+        // 5. MASTER FILE 
         // ==============================================
         function renderMasterTable() {
             const groupedData = {};
@@ -2178,6 +2309,7 @@
                             <option value="Damaged" ${d.conditionLog==='Damaged'?'selected':''}>Damaged</option>
                             <option value="Different" ${d.conditionLog==='Different'?'selected':''}>Different</option>
                             <option value="Missing Quantity" ${d.conditionLog==='Missing Quantity'?'selected':''}>Missing Qty</option>
+                            <option value="Missing Parts" ${d.conditionLog==='Missing Parts'?'selected':''}>Missing Parts</option>
                             <option value="Lost" ${d.conditionLog==='Lost'?'selected':''}>Lost</option>
                             <option value="Fake" ${d.conditionLog==='Fake'?'selected':''}>Fake</option>
                             <option value="Return Cancelled" ${d.conditionLog==='Return Cancelled'?'selected':''}>Return Cancelled</option>
@@ -2198,7 +2330,7 @@
             
             let cStatusHtml = items.map(d => {
                  if(isEditing) {
-                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.uid}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option></select></div>`;
+                    return `<div style="padding:4px 0;"><select id="em-cstatus-${d.uid}" class="master-input" style="width:90px;"><option value="None" ${d.claimStatus==='None'?'selected':''}>None</option><option value="Pending Claim" ${d.claimStatus==='Pending Claim'?'selected':''}>Pending</option><option value="Under Review" ${d.claimStatus==='Under Review'?'selected':''}>Review</option><option value="Approved" ${d.claimStatus==='Approved'?'selected':''}>Approved</option><option value="Denied" ${d.claimStatus==='Denied'?'selected':''}>Denied</option></select></div>`;
                 } else {
                     return `<div style="padding:4px 0;"><b>${d.claimStatus||'None'}</b></div>`;
                 }
@@ -2237,7 +2369,6 @@
         function saveMasterRow(oid) {
             const items = reportData.filter(d => d.orderId === oid);
             
-            // REDUCED QUOTA FIX: Update ONLY the specific Master Rows in a batch
             const batch = db.batch();
             
             items.forEach(item => {
@@ -2417,22 +2548,6 @@
         // ==============================================
         // BULK IMPORT LOGIC (CHANGED FIELDS ONLY)
         // ==============================================
-        function parseCSVLine(text) {
-            let ret = [], col = "", inQuote = false;
-            for (let i = 0; i < text.length; i++) {
-                let c = text[i];
-                if (inQuote) {
-                    if (c === '"') {
-                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
-                    } else { col += c; }
-                } else {
-                    if (c === '"') { inQuote = true; } else if (c === ',') { ret.push(col.trim()); col = ""; } else { col += c; }
-                }
-            }
-            ret.push(col.trim());
-            return ret;
-        }
-
         function importBulkEdit(event) {
             const file = event.target.files[0];
             if(!file) return;
