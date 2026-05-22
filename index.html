@@ -642,6 +642,58 @@
         db.enablePersistence().catch(err => console.log("Persistence error:", err));
 
         // ==============================================
+        // GLOBAL DATE FORMATTER (DD-MM-YYYY)
+        // ==============================================
+        function fmtDate(dStr) {
+            if (!dStr || dStr === '-' || dStr === '') return '-';
+            let s = dStr.toString().trim();
+            // If already DD-MM-YYYY
+            if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+            // If YYYY-MM-DD, convert to DD-MM-YYYY
+            let match = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+            // If it's another format (e.g. 10/24/2025), let JS Date handle it
+            let d = new Date(s);
+            if (!isNaN(d.getTime())) {
+                return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + d.getFullYear();
+            }
+            return s; // Fallback
+        }
+
+        // Standardize dates to YYYY-MM-DD for database storage so <input type="date"> works smoothly
+        function standardizeToYYYYMMDD(dStr) {
+            if(!dStr) return "";
+            let s = dStr.toString().trim();
+            if(s.includes('T')) s = s.split('T')[0];
+            if(s.includes(' ')) s = s.split(' ')[0];
+            
+            let d = new Date(s);
+            if(!isNaN(d.getTime())) {
+                return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            }
+            return s;
+        }
+
+        // ==============================================
+        // GLOBAL CSV PARSER
+        // ==============================================
+        function parseCSVLine(text, sep = ',') {
+            let ret = [], col = "", inQuote = false;
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i];
+                if (inQuote) {
+                    if (c === '"') {
+                        if (text[i + 1] === '"') { col += '"'; i++; } else { inQuote = false; }
+                    } else { col += c; }
+                } else {
+                    if (c === '"') { inQuote = true; } else if (c === sep) { ret.push(col.trim()); col = ""; } else { col += c; }
+                }
+            }
+            ret.push(col.trim());
+            return ret;
+        }
+
+        // ==============================================
         // APPLICATION LOGIC & VARIABLES
         // ==============================================
         const DEFAULT_CO = [
@@ -659,11 +711,11 @@
 
         // --- CLAIM MESSAGE TEMPLATES ---
         let defaultClaimTemplates = {
-            "Damaged": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received the return for the above order, but the item is completely damaged and unsellable. We expected [EXP_QTY] in good condition. Please investigate and reimburse us for the damaged return.\n\nThank you.",
-            "Different": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received a return, but the buyer has returned a completely different product instead of our original item. Please issue a reimbursement for this fraudulent return.\n\nThank you.",
-            "Missing Quantity": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nThe buyer returned this order, but there is a quantity discrepancy. We shipped [EXP_QTY] units, but only received [REC_QTY] units back. Please reimburse us for the missing units.\n\nThank you.",
-            "Missing Parts": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nWe received the return, but crucial parts/accessories are missing from the package, making the item unsellable. Please reimburse for the loss of value.\n\nThank you.",
-            "Lost": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER_ID]\nTracking ID: [TRACKING_ID]\nASIN: [ASIN]\n\nThe carrier tracking shows this return was processed, but we never received the physical package at our facility. Please investigate this lost return and issue a reimbursement.\n\nThank you."
+            "Damaged": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER ID]\nTracking ID: [TRACKING ID]\nASIN: [ASIN]\nProduct Title: [PRODUCT TITLE]\n\nWe received the return for the above order, but the item is completely damaged and unsellable. We expected [QTY] in good condition. Please investigate and reimburse us for the damaged return.\n\nThank you.",
+            "Different": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER ID]\nTracking ID: [TRACKING ID]\nASIN: [ASIN]\nProduct Title: [PRODUCT TITLE]\n\nWe received a return, but the buyer has returned a completely different product instead of our original item. Please issue a reimbursement for this fraudulent return.\n\nThank you.",
+            "Missing Quantity": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER ID]\nTracking ID: [TRACKING ID]\nASIN: [ASIN]\nProduct Title: [PRODUCT TITLE]\n\nThe buyer returned this order, but there is a quantity discrepancy. We shipped [QTY] units, but only received [REC QTY] units back. Please reimburse us for the missing units.\n\nThank you.",
+            "Missing Parts": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER ID]\nTracking ID: [TRACKING ID]\nASIN: [ASIN]\nProduct Title: [PRODUCT TITLE]\n\nWe received the return, but crucial parts/accessories are missing from the package, making the item unsellable. Please reimburse for the loss of value.\n\nThank you.",
+            "Lost": "Dear Amazon Seller Support,\n\nOrder ID: [ORDER ID]\nTracking ID: [TRACKING ID]\nASIN: [ASIN]\nProduct Title: [PRODUCT TITLE]\n\nThe carrier tracking shows this return was processed, but we never received the physical package at our facility. Please investigate this lost return and issue a reimbursement.\n\nThank you."
         };
         let userTemplates = JSON.parse(localStorage.getItem('claimTemplates')) || defaultClaimTemplates;
 
@@ -776,7 +828,7 @@
                     reportData.sort((a,b) => new Date(b.reqDate) - new Date(a.reqDate));
                     
                     document.getElementById('ingestionTableBody').innerHTML = reportData.map(d => `
-                        <tr><td>${d.orderDate||'-'}</td><td>${d.reqDate}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
+                        <tr><td>${fmtDate(d.orderDate)}</td><td>${fmtDate(d.reqDate)}</td><td>${d.orderId}</td><td>${d.trackingId}</td>
                         <td>${d.asin}</td><td>${d.sku}</td><td>${d.amzReason}</td>
                         <td><b>${d.oAmt}</b></td><td><b>${d.oQty}</b></td></tr>
                     `).join('');
@@ -1058,8 +1110,7 @@
                     <h3>💰 Cost Price (50% Val)</h3>
                     <div class="stat-row"><span>Damaged:</span> <span class="stat-val">${formatAmt(cDamaged.cost)}</span></div>
                     <div class="stat-row"><span>Different:</span> <span class="stat-val">${formatAmt(cDiff.cost)}</span></div>
-                    <div class="stat-row"><span>Missing Qty:</span> <span class="stat-val">${formatAmt(cMiss.cost)}</span></div>
-                    <div class="stat-row"><span>Missing Parts:</span> <span class="stat-val">${formatAmt(cMissParts.cost)}</span></div>
+                    <div class="stat-row"><span>Miss Qty/Parts:</span> <span class="stat-val">${formatAmt(cMiss.cost + cMissParts.cost)}</span></div>
                     <div class="stat-row"><span>Lost:</span> <span class="stat-val">${formatAmt(cLost.cost)}</span></div>
                 </div>
 
@@ -1141,9 +1192,9 @@
 
                         validRecords.push({
                             uid: uniqueId,  
-                            orderDate: (map.oDate !== -1 && c[map.oDate]) ? c[map.oDate] : "",
+                            orderDate: standardizeToYYYYMMDD(map.oDate !== -1 && c[map.oDate] ? c[map.oDate] : ""),
                             orderId: oid || `UNKNOWN-OID-${Date.now()}-${idx}`,
-                            reqDate: (map.reqDate !== -1 && c[map.reqDate]) ? c[map.reqDate] : "",
+                            reqDate: standardizeToYYYYMMDD(map.reqDate !== -1 && c[map.reqDate] ? c[map.reqDate] : ""),
                             trackingId: tid,
                             sku: sku,
                             asin: asin,
@@ -1249,7 +1300,7 @@
                             for (let i = 1; i < lines.length; i++) {
                                 if (!lines[i].trim()) continue;
                                 
-                                const cols = sep === ',' ? parseCSVLine(lines[i]) : lines[i].split(sep);
+                                const cols = parseCSVLine(lines[i], sep);
                                 
                                 let rowOid = cols[oidIdx] ? cols[oidIdx].replace(/^"|"$/g, '').trim() : "";
                                 let rowTid = cols[tidIdx] ? cols[tidIdx].replace(/^"|"$/g, '').trim() : "";
@@ -1353,7 +1404,7 @@
 
             document.getElementById('scanTableBody').innerHTML = pendingScans.map(d => `
                 <tr id="row-${d.uid}">
-                    <td>${d.delDate || '-'}</td>
+                    <td>${fmtDate(d.delDate)}</td>
                     <td style="font-size:12px;"><b>${d.orderId}</b><br>ASIN: ${d.asin}</td>
                     <td>${d.trackingId}</td>
                     <td style="font-size:12px;"><b>Val:</b> ${d.oAmt}<br><b>Exp Qty:</b> ${d.oQty}</td>
@@ -1388,13 +1439,13 @@
                 const d = reportData.find(item => item.uid === uid);
                 if (!d) continue;
 
-                let dVal = (d.delDate || "-").toUpperCase();
+                let dVal = fmtDate(d.delDate).toUpperCase();
                 let mDate = dateVals.length === 0 || dateVals.includes(dVal);
 
                 if (mDate) row.style.display = "";
                 else row.style.display = "none";
 
-                aDate.add(d.delDate || "-");
+                aDate.add(fmtDate(d.delDate));
             }
             
             populateMS('ms-opt-scanDateSearch', [...aDate], 'filterScanTable');
@@ -1548,7 +1599,7 @@
 
                 if (d.claimStatus === 'Approved' && !isEditing) {
                     contentHtml = `
-                        <td><b>${d.claimId || '-'}</b><br>${d.claimDate || '-'}</td>
+                        <td><b>${d.claimId || '-'}</b><br>${fmtDate(d.claimDate)}</td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             Amt Rec: <b>${d.amtRec || '0'}</b><br>Qty Rec: <b>${d.recQty || '0'}</b>
@@ -1560,7 +1611,7 @@
                     `;
                 } else if (d.claimStatus === 'Denied' && !isEditing) {
                     contentHtml = `
-                        <td><b>${d.claimId || '-'}</b><br>${d.claimDate || '-'}</td>
+                        <td><b>${d.claimId || '-'}</b><br>${fmtDate(d.claimDate)}</td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             Amt Rec: <b>${d.amtRec || '0'}</b><br>Qty Rec: <b>${d.recQty || '0'}</b>
@@ -1602,7 +1653,7 @@
                 }
 
                 return `<tr id="safety-row-${d.uid}" style="${rowColor}">
-                    <td>${d.delDate||'-'}</td>
+                    <td>${fmtDate(d.delDate)}</td>
                     <td style="font-size:12px;"><b>SKU: ${d.sku || '-'}</b><br><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
                     ${contentHtml}
@@ -1611,6 +1662,7 @@
             
             document.querySelectorAll('td[data-val] input[id^="amt-"]').forEach(el => calcSafety(el));
             filterSafety();
+            populateMsgOrderIds(); // Update message dropdown if conditions match
         }
 
         function toggleSafetySave(uid, cond) {
@@ -1687,6 +1739,10 @@
                 const dynCid = document.getElementById(`cid-${uid}`);
                 const dynCDate = document.getElementById(`cdate-${uid}`);
                 let vClaim = claimType === 'claimId' ? (dynCid ? dynCid.value : (d.claimId||"")) : (dynCDate ? dynCDate.value : (d.claimDate||""));
+                
+                // If it's a date being searched, check formatted value too
+                if (claimType === 'claimDate') vClaim = fmtDate(vClaim);
+                
                 vClaim = vClaim.toString().toUpperCase();
                 let mClaim = claimVals.length === 0 || claimVals.includes(vClaim);
 
@@ -1701,7 +1757,9 @@
                 else row.style.display = "none";
 
                 if (mDate && mCond && mStatus && mClaim && mVal) aSearch.add(d[searchType]);
-                if (mDate && mCond && mStatus && mSearch && mVal) aClaim.add(claimType === 'claimId' ? d.claimId : d.claimDate);
+                if (mDate && mCond && mStatus && mSearch && mVal) {
+                    aClaim.add(claimType === 'claimId' ? d.claimId : fmtDate(d.claimDate));
+                }
                 if (mDate && mCond && mStatus && mSearch && mClaim) aVal.add(valType === 'amtRec' ? (dynAmt?dynAmt.value:d.amtRec) : (valType === 'recQty' ? (dynQty?dynQty.value:d.recQty) : d[valType]));
             }
 
@@ -1776,7 +1834,7 @@
             document.getElementById('msgSelectedUid').value = uid;
             document.getElementById('msgOrderSearch').value = displayText;
             document.getElementById('msgOrderOptions').classList.remove('show');
-            generateMessage();
+            // Deliberately NOT calling generateMessage() here as requested.
         }
 
         function populateMsgOrderIds() {
@@ -1802,23 +1860,26 @@
             );
 
             let matches = [];
-            if (cond === 'Lost') {
-                matches = reportData.filter(d => d.status === 'In Transit');
-            } else {
-                matches = pendingClaims.filter(d => d.conditionLog === cond);
-            }
-
             let allSafetyClaims = reportData.filter(d =>
                 d.conditionLog && d.conditionLog !== 'Saleable' && d.conditionLog !== 'Return Cancelled' && d.claimStatus !== 'Approved' && d.claimStatus !== 'Denied'
             );
+            
+            let others = [];
 
-            let matchUids = matches.map(m => m.uid);
-            let others = allSafetyClaims.filter(d => !matchUids.includes(d.uid));
+            if (cond === 'Lost') {
+                // If "Lost", only show "In Transit" items from the master file. (Strict request)
+                matches = reportData.filter(d => d.status === 'In Transit');
+                others = []; // Don't show regular safety claims if "Lost" condition selected.
+            } else {
+                matches = pendingClaims.filter(d => d.conditionLog === cond);
+                let matchUids = matches.map(m => m.uid);
+                others = allSafetyClaims.filter(d => !matchUids.includes(d.uid));
+            }
 
             if (matches.length > 0) {
                 let header = document.createElement('div');
                 header.style.cssText = 'padding:6px 8px; background:#e8f0fe; color:#174ea6; font-size:11px; font-weight:bold;';
-                header.innerText = cond === 'Lost' ? `🔥 MATCHING: IN TRANSIT (${matches.length})` : `🔥 MATCHING CONDITION (${matches.length})`;
+                header.innerText = cond === 'Lost' ? `🔥 IN TRANSIT (${matches.length})` : `🔥 MATCHING CONDITION (${matches.length})`;
                 container.appendChild(header);
 
                 matches.forEach(d => {
@@ -1864,13 +1925,15 @@
 
             let template = userTemplates[cond] || "";
             let msg = template
-                .replace(/\[ORDER_ID\]/g, item.orderId || '')
-                .replace(/\[ASIN\]/g, item.asin || '')
-                .replace(/\[SKU\]/g, item.sku || '')
-                .replace(/\[TRACKING_ID\]/g, item.trackingId || '')
-                .replace(/\[EXP_QTY\]/g, item.oQty || '')
-                .replace(/\[REC_QTY\]/g, item.recQty || '')
-                .replace(/\[ORDER_AMT\]/g, item.oAmt || '');
+                .replace(/\[ORDER_ID\]|\[ORDER ID\]/gi, item.orderId || '')
+                .replace(/\[ASIN\]/gi, item.asin || '')
+                .replace(/\[PRODUCT_TITLE\]|\[PRODUCT TITLE\]/gi, item.sku || '')
+                .replace(/\[SKU\]/gi, item.sku || '')
+                .replace(/\[TRACKING_ID\]|\[TRACKING ID\]/gi, item.trackingId || '')
+                .replace(/\[EXP_QTY\]|\[EXP QTY\]/gi, item.oQty || '')
+                .replace(/\[QTY\]/gi, item.oQty || '')
+                .replace(/\[REC_QTY\]|\[REC QTY\]/gi, item.recQty || '')
+                .replace(/\[ORDER_AMT\]|\[ORDER AMT\]/gi, item.oAmt || '');
 
             document.getElementById('generatedMsgText').value = msg;
             document.getElementById('msgOutputArea').style.display = 'block';
@@ -1896,7 +1959,7 @@
             const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = 'Claim_Templates.doc';
+            link.download = 'Claim_Templates.doc'; // Preserving .doc extension so it opens in Word
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -1924,8 +1987,16 @@
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     let text = e.target.result;
+                    // Detect if it is actually binary jargon instead of fake-HTML doc
+                    if (text.indexOf('\x00') !== -1) {
+                        alert("⚠️ Binary format detected!\n\nYou saved this as an older '.doc' format. To use it in this system, please open your file in Microsoft Word, click 'Save As', and choose either '.docx' (Word Document) or '.txt' (Plain Text) format before uploading.");
+                        return;
+                    }
+                    
                     if (text.includes('<html')) {
-                        text = text.replace(/<br\s*[\/]?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '');
+                        const temp = document.createElement('div');
+                        temp.innerHTML = text.replace(/<br\s*[\/]?>/gi, '\n').replace(/<\/p>/gi, '\n\n');
+                        text = temp.textContent || temp.innerText;
                     }
                     parseTemplateText(text);
                 };
@@ -1935,8 +2006,11 @@
         }
 
         function parseTemplateText(text) {
-            const blocks = text.split(/===\s*(DAMAGED|DIFFERENT|MISSING QUANTITY|MISSING PARTS|LOST)\s*===/i);
-            if (blocks.length > 2) {
+            text = text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+            const regex = /===\s*(DAMAGED|DIFFERENT|MISSING QUANTITY|MISSING PARTS|LOST)\s*===/ig;
+            const blocks = text.split(regex);
+            
+            if (blocks.length >= 3) {
                 let newTpls = { ...userTemplates };
                 for(let i=1; i<blocks.length; i+=2) {
                     let key = blocks[i].toUpperCase();
@@ -1951,7 +2025,7 @@
                 localStorage.setItem('claimTemplates', JSON.stringify(userTemplates));
                 alert("Templates updated successfully!");
             } else {
-                alert("Could not parse templates. Make sure to keep the '=== CONDITION ===' headings intact in the document.");
+                alert("Could not parse templates. Make sure the headers like '=== DAMAGED ===' are kept exactly as downloaded.");
             }
         }
 
@@ -2041,7 +2115,7 @@
 
                 return `<tr id="ag-row-${elId}" style="${bg}">
                     <td><input type="checkbox" class="aging-cb" value="${elId}" data-uids="${uids}"></td>
-                    <td>${group.reqDate}</td>
+                    <td>${fmtDate(group.reqDate)}</td>
                     <td style="font-size:12px;">
                         <b>${group.orderId}</b><br>
                         ASIN: ${group.asin}<br>
@@ -2072,7 +2146,7 @@
             filterAging();
         }
 
-        function processPaymentFile() {
+        async function processPaymentFile() {
             const fileInput = document.getElementById('agingPaymentFile');
             const file = fileInput.files[0];
             if(!file) return alert("Please select a file to upload.");
@@ -2081,133 +2155,129 @@
 
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const lines = e.target.result.split('\n');
-                
-                let hIdx = -1;
-                for(let i=0; i<Math.min(30, lines.length); i++) {
-                    const lowerLine = lines[i].toLowerCase();
-                    // Checking exactly for the start of the standard Amazon Unified header
-                    if(lowerLine.startsWith('"date/time"') || lowerLine.startsWith('date/time')) {
-                        hIdx = i; break;
-                    }
-                }
-                
-                if(hIdx === -1) {
-                    alert("Could not find header row starting with 'date/time' in the uploaded file.");
-                    fileInput.value = '';
-                    setCloudStatus('online');
-                    return;
-                }
-                
-                const hLine = lines[hIdx].replace(/\r$/, '');
-                const sep = hLine.includes('\t') ? '\t' : ',';
-                const headers = parseCSVLine(hLine, sep).map(h=>h.toLowerCase());
-                
-                const typeIdx = headers.findIndex(h => h === 'type' || h.includes('transaction type'));
-                const oidIdx = headers.findIndex(h => h === 'order id' || h === 'orderid');
-                const dateIdx = headers.findIndex(h => h === 'date/time' || h.includes('date'));
-
-                if(typeIdx === -1 || oidIdx === -1) {
-                    alert("Could not properly read 'type' or 'order id' columns. Is the file formatted correctly?");
-                    fileInput.value = '';
-                    setCloudStatus('online');
-                    return;
-                }
-
-                let orderMap = {}; 
-                let refundReimbCount = 0;
-                
-                for(let i = hIdx + 1; i < lines.length; i++) {
-                    let line = lines[i].replace(/\r$/, '');
-                    if(!line.trim()) continue;
+                try {
+                    const lines = e.target.result.split('\n');
                     
-                    const cols = parseCSVLine(line, sep);
-                    if(cols.length <= Math.max(typeIdx, oidIdx)) continue;
-
-                    let oid = (cols[oidIdx] || "").trim();
-                    let type = (cols[typeIdx] || "").trim().toLowerCase();
-                    let dStr = dateIdx !== -1 ? (cols[dateIdx] || "").trim() : "";
-                    let dTime = dStr ? new Date(dStr).getTime() : 0;
-                    
-                    if(type.includes('reimbursement') || type.includes('refund')) {
-                        if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
-                            orderMap[oid] = { type: type, dTime: dTime };
+                    let hIdx = -1;
+                    // Look for the "date/time" header explicitly
+                    for(let i=0; i<Math.min(30, lines.length); i++) {
+                        const lowerLine = lines[i].toLowerCase().trim();
+                        if(lowerLine.startsWith('"date/time"') || lowerLine.startsWith('date/time')) {
+                            hIdx = i; 
+                            break;
                         }
                     }
-                }
-
-                refundReimbCount = Object.keys(orderMap).length;
-
-                if(!customAgingActions.includes('Reimbursed for lost')) customAgingActions.push('Reimbursed for lost');
-                if(!customAgingActions.includes('Refund & Not Reimbursed ( 50d - 75d )')) customAgingActions.push('Refund & Not Reimbursed ( 50d - 75d )');
-                localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
-                renderAgingActions();
-
-                const batch = db.batch();
-                let updatedCount = 0;
-                let matchedOids = [];
-
-                Object.keys(orderMap).forEach(oid => {
-                    const info = orderMap[oid];
-                    let newAction = "";
-                    let newStatus = "";
-                    let newReimb = "";
                     
-                    if (info.type.includes('reimbursement')) {
-                        newAction = "Reimbursed for lost";
-                        newStatus = "Approved";
-                        newReimb = "yes";
-                    } else if (info.type.includes('refund')) {
-                        newAction = "Refund & Not Reimbursed ( 50d - 75d )";
-                        newReimb = "no";
+                    if(hIdx === -1) throw new Error("Could not find header row starting with 'date/time'.");
+                    
+                    const hLine = lines[hIdx].replace(/\r$/, '');
+                    const sep = hLine.includes('\t') ? '\t' : ',';
+                    const headers = parseCSVLine(hLine, sep).map(h=>h.toLowerCase());
+                    
+                    const typeIdx = headers.findIndex(h => h === 'type' || h.includes('transaction type'));
+                    const oidIdx = headers.findIndex(h => h === 'order id' || h === 'orderid');
+                    const dateIdx = headers.findIndex(h => h === 'date/time' || h.includes('date'));
+
+                    if(typeIdx === -1 || oidIdx === -1) throw new Error("Could not find 'type' or 'order id' columns.");
+
+                    let orderMap = {}; 
+                    let refundReimbCount = 0;
+                    
+                    for(let i = hIdx + 1; i < lines.length; i++) {
+                        let line = lines[i].replace(/\r$/, '');
+                        if(!line.trim()) continue;
+                        
+                        const cols = parseCSVLine(line, sep);
+                        if(cols.length <= Math.max(typeIdx, oidIdx)) continue;
+
+                        let oid = (cols[oidIdx] || "").trim();
+                        let type = (cols[typeIdx] || "").trim().toLowerCase();
+                        
+                        let dStr = dateIdx !== -1 ? (cols[dateIdx] || "").trim() : "";
+                        let dTime = dStr ? new Date(dStr).getTime() : 0;
+                        if(isNaN(dTime)) dTime = 0;
+                        
+                        if(type.includes('reimbursement') || type.includes('refund')) {
+                            if(!orderMap[oid] || orderMap[oid].dTime <= dTime) {
+                                orderMap[oid] = { type: type, dTime: dTime };
+                            }
+                        }
                     }
 
-                    if (newAction) {
-                        let itemsToUpdate = reportData.filter(d => {
-                            if (d.orderId !== oid) return false;
-                            if (!d.reqDate) return false;
-                            if (d.status === 'Received' || d.status === 'Lost') return false; 
-                            const diff = Math.ceil((new Date() - new Date(d.reqDate)) / (1000*60*60*24));
-                            return diff > 50 && (d.status === 'In Transit' || d.status === 'Pending Scan');
-                        });
+                    refundReimbCount = Object.keys(orderMap).length;
 
-                        if (itemsToUpdate.length > 0) {
-                            matchedOids.push(oid);
-                            itemsToUpdate.forEach(item => {
-                                item.agingAction = newAction;
-                                if(newStatus) item.agingStatus = newStatus;
-                                if(newReimb) item.agingReimb = newReimb;
-                                
-                                const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(item.uid);
-                                batch.set(docRef, { 
-                                    agingAction: item.agingAction, 
-                                    agingStatus: item.agingStatus,
-                                    agingReimb: item.agingReimb 
-                                }, { merge: true });
-                                updatedCount++;
+                    if(!customAgingActions.includes('Reimbursed for lost')) customAgingActions.push('Reimbursed for lost');
+                    if(!customAgingActions.includes('Refund & Not Reimbursed ( 50d - 75d )')) customAgingActions.push('Refund & Not Reimbursed ( 50d - 75d )');
+                    localStorage.setItem('agingActions', JSON.stringify(customAgingActions));
+                    renderAgingActions();
+
+                    let chunks = [];
+                    let matchedOids = [];
+
+                    Object.keys(orderMap).forEach(oid => {
+                        const info = orderMap[oid];
+                        let newAction = "";
+                        let newStatus = "";
+                        let newReimb = "";
+                        
+                        if (info.type.includes('reimbursement')) {
+                            newAction = "Reimbursed for lost";
+                            newStatus = "Approved";
+                            newReimb = "yes";
+                        } else if (info.type.includes('refund')) {
+                            newAction = "Refund & Not Reimbursed ( 50d - 75d )";
+                            newReimb = "no";
+                        }
+
+                        if (newAction) {
+                            let itemsToUpdate = reportData.filter(d => {
+                                if (d.orderId !== oid) return false;
+                                if (!d.reqDate) return false;
+                                if (d.status === 'Received' || d.status === 'Lost') return false; 
+                                const diff = Math.ceil((new Date() - new Date(d.reqDate)) / (1000*60*60*24));
+                                return diff > 50 && (d.status === 'In Transit' || d.status === 'Pending Scan');
                             });
-                        }
-                    }
-                });
 
-                if (updatedCount > 0) {
-                    await batch.commit().catch(e => console.error(e));
-                    setCloudStatus('online');
-                    checkAging();
-                    
-                    let msg = `✅ Upload Complete!\n\n`;
-                    msg += `📊 Found ${refundReimbCount} Refund/Reimbursement records in the file.\n`;
-                    msg += `🎯 Matched ${matchedOids.length} of those to your 50+ Days Aging list.\n`;
-                    msg += `🔄 Updated ${updatedCount} tracking IDs automatically.\n\n`;
-                    msg += `Matched Order IDs:\n${matchedOids.slice(0, 10).join(', ')}`;
-                    if(matchedOids.length > 10) msg += `\n...and ${matchedOids.length - 10} more.`;
-                    
-                    alert(msg);
-                } else {
-                    setCloudStatus('online');
-                    alert(`ℹ️ Upload Processed.\nFound ${refundReimbCount} Refund/Reimbursement records in the file, but NONE of them matched any active items currently in your 50+ Days Aging list.\n\n(They either haven't crossed 50 days yet, or have already been marked as Received/Lost).`);
+                            if (itemsToUpdate.length > 0) {
+                                matchedOids.push(oid);
+                                itemsToUpdate.forEach(item => {
+                                    chunks.push({ item, newAction, newStatus, newReimb });
+                                });
+                            }
+                        }
+                    });
+
+                    if (chunks.length > 0) {
+                        const chunkSize = 400; // Safe batch limit
+                        for(let i = 0; i < chunks.length; i += chunkSize) {
+                            const batch = db.batch();
+                            const slice = chunks.slice(i, i + chunkSize);
+                            
+                            slice.forEach(c => {
+                                c.item.agingAction = c.newAction;
+                                if(c.newStatus) c.item.agingStatus = c.newStatus;
+                                if(c.newReimb) c.item.agingReimb = c.newReimb;
+                                
+                                const docRef = db.collection('workspaces').doc(currentCompany).collection('returns').doc(c.item.uid);
+                                batch.set(docRef, { agingAction: c.item.agingAction, agingStatus: c.item.agingStatus, agingReimb: c.item.agingReimb }, { merge: true });
+                            });
+                            await batch.commit();
+                        }
+
+                        checkAging();
+                        let msg = `✅ Upload Complete!\n\n📊 Found ${refundReimbCount} Refund/Reimbursement records in the file.\n🎯 Matched ${matchedOids.length} of those to your 50+ Days Aging list.\n🔄 Updated ${chunks.length} tracking IDs automatically.\n\nMatched Order IDs:\n${matchedOids.slice(0, 10).join(', ')}`;
+                        if(matchedOids.length > 10) msg += `\n...and ${matchedOids.length - 10} more.`;
+                        alert(msg);
+                    } else {
+                        alert(`ℹ️ Upload Processed.\nFound ${refundReimbCount} Refund/Reimbursement records in the file, but NONE of them matched any active items currently in your 50+ Days Aging list.`);
+                    }
+                } catch (err) {
+                    console.error("Aging File Error:", err);
+                    alert("Error processing the aging payment file: " + err.message);
+                } finally {
+                    setCloudStatus(navigator.onLine ? 'online' : 'offline');
+                    fileInput.value = '';
                 }
-                fileInput.value = '';
             };
             
             reader.onerror = () => { alert("Error reading file."); setCloudStatus('offline'); fileInput.value = ''; };
@@ -2377,7 +2447,7 @@
             let dupWarn = isMultiple ? `<br><span style="color:#d39e00; font-size:10px; font-weight:bold;">⚠️ MULTIPLE TRACKINGS</span>` : ``;
 
             let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}<br><b>SKU:</b> ${d.sku}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
-            let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${d.orderDate||'-'}<br>Req: ${d.reqDate}<br>Del: ${d.delDate||'-'}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : (d.claimDate||'-')}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${fmtDate(d.orderDate)}<br>Req: ${fmtDate(d.reqDate)}<br>Del: ${fmtDate(d.delDate)}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : fmtDate(d.claimDate)}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let valQtyHtml = items.map(d => `<div style="padding:4px 0;">Val: <b>${d.oAmt}</b><br>Exp Qty: ${d.oQty}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             
             let statCondHtml = items.map(d => {
@@ -2612,7 +2682,7 @@
             
             dataToExport.forEach(d => {
                 const safeReason = (d.amzReason || "").replace(/,/g, " ");
-                csv += `"${d.orderId}","${d.orderDate||''}","${d.trackingId}","${d.asin}","${d.sku}","${d.reqDate}","${d.delDate||''}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${d.claimDate||''}","${d.amtRec||''}"\n`;
+                csv += `"${d.orderId}","${fmtDate(d.orderDate)}","${d.trackingId}","${d.asin}","${d.sku}","${fmtDate(d.reqDate)}","${fmtDate(d.delDate)}","${safeReason}","${d.oAmt}","${d.oQty}","${d.recQty}","${d.status}","${d.conditionLog}","${d.claimStatus}","${d.claimId||''}","${fmtDate(d.claimDate)}","${d.amtRec||''}"\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2667,11 +2737,9 @@
                                 if (cols.length > idx) {
                                     let v = safeGet(idx);
                                     
-                                    if (isDate && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-                                        let d = new Date(v);
-                                        if (!isNaN(d.getTime())) {
-                                            v = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-                                        }
+                                    if (isDate && v) {
+                                        // Standardize incoming dates to yyyy-mm-dd
+                                        v = standardizeToYYYYMMDD(v);
                                     }
                                     
                                     if (v !== '' && v !== (item[key] || '')) {
