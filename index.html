@@ -148,11 +148,11 @@
                 <h2>1. Amazon Report Ingestion</h2>
                 <div class="upload-grid" style="grid-template-columns: 1fr;">
                     <div class="upload-box">
-                        <h3>Upload Amazon Return Report (.tsv / .txt)</h3>
+                        <h3>Upload Amazon Return Report (.tsv / .txt / .csv)</h3>
                         <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Select your file, then click Upload to merge it safely into your All-Time Cloud Database.</p>
                         
                         <div style="display: flex; justify-content: center; gap: 10px; align-items: center; margin-top: 15px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f8f9fa;">
-                            <input type="file" id="amazonReport" accept=".tsv,.txt" style="max-width: 250px;">
+                            <input type="file" id="amazonReport" accept=".tsv,.txt,.csv" style="max-width: 250px;">
                             <button class="action-btn" onclick="processAmazonReport()" style="background:#0F5132;">📤 Upload Data</button>
                         </div>
                     </div>
@@ -652,7 +652,7 @@
             // If YYYY-MM-DD, convert to DD-MM-YYYY
             let match = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
             if (match) return `${match[3]}-${match[2]}-${match[1]}`;
-            // If it's another format (e.g. 10/24/2025), let JS Date handle it
+            
             let d = new Date(s);
             if (!isNaN(d.getTime())) {
                 return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + d.getFullYear();
@@ -660,13 +660,36 @@
             return s; // Fallback
         }
 
-        // Standardize dates to YYYY-MM-DD for database storage so <input type="date"> works smoothly
+        // Extremely robust parser to save all incoming dates internally as YYYY-MM-DD 
+        // This ensures math calculations (like 50+ days aging) work flawlessly.
         function standardizeToYYYYMMDD(dStr) {
             if(!dStr) return "";
             let s = dStr.toString().trim();
             if(s.includes('T')) s = s.split('T')[0];
             if(s.includes(' ')) s = s.split(' ')[0];
-            
+
+            let parts = s.split(/[-/]/);
+            if (parts.length === 3) {
+                let p1 = parseInt(parts[0]);
+                let p2 = parseInt(parts[1]);
+                let p3 = parseInt(parts[2]);
+
+                if (p3 > 1000) { 
+                    // Handle DD-MM-YYYY explicitly (Because India uses this)
+                    if (p1 > 12 && p2 <= 12) {
+                        return `${p3}-${String(p2).padStart(2,'0')}-${String(p1).padStart(2,'0')}`;
+                    } 
+                    // Handle MM-DD-YYYY explicitly (Because Amazon USA uses this)
+                    else if (p2 > 12 && p1 <= 12) {
+                        return `${p3}-${String(p1).padStart(2,'0')}-${String(p2).padStart(2,'0')}`;
+                    } 
+                    // If ambiguous (e.g. 05-05-2026), default to treating it as DD-MM-YYYY per your request
+                    else {
+                        return `${p3}-${String(p2).padStart(2,'0')}-${String(p1).padStart(2,'0')}`; 
+                    }
+                }
+            }
+
             let d = new Date(s);
             if(!isNaN(d.getTime())) {
                 return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -1150,18 +1173,19 @@
                     const rows = e.target.result.split('\n');
                     if(rows.length < 2) throw new Error("File appears to be empty.");
                     
-                    const h = rows[0].split('\t');
+                    const sep = rows[0].includes('\t') ? '\t' : ',';
+                    const h = rows[0].split(sep).map(col => col.replace(/^"|"$/g, '').trim());
                     
                     const map = { 
-                        oid: h.indexOf('Order ID'), 
-                        reqDate: h.indexOf('Return request date'), 
+                        oid: h.findIndex(col => col.toLowerCase().includes('order id')), 
+                        reqDate: h.findIndex(col => col.toLowerCase().includes('return request date')), 
                         oDate: h.findIndex(col => col.toLowerCase().includes('order date')), 
-                        tid: h.indexOf('Tracking ID'), 
-                        sku: h.indexOf(' Merchant SKU'), 
-                        asin: h.indexOf('ASIN'), 
-                        reason: h.indexOf('Return reason'), 
-                        oAmt: h.indexOf('Order Amount'), 
-                        oQty: h.indexOf('Order quantity') 
+                        tid: h.findIndex(col => col.toLowerCase().includes('tracking id') || col.toLowerCase().includes('tracking number')), 
+                        sku: h.findIndex(col => col.toLowerCase().includes('merchant sku')), 
+                        asin: h.findIndex(col => col.toLowerCase().includes('asin')), 
+                        reason: h.findIndex(col => col.toLowerCase().includes('return reason')), 
+                        oAmt: h.findIndex(col => col.toLowerCase().includes('order amount')), 
+                        oQty: h.findIndex(col => col.toLowerCase().includes('order quantity')) 
                     };
                     
                     let validRecords = [];
@@ -1170,15 +1194,15 @@
                     rows.slice(1).forEach((r, idx) => {
                         if (!r.trim()) return; 
 
-                        const c = r.split('\t');
+                        const c = parseCSVLine(r, sep);
                         if (c.length < 3) return;
 
-                        let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].trim() : "";
-                        if (oid === 'Order ID') return; 
+                        let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].replace(/^"|"$/g, '').trim() : "";
+                        if (oid === 'Order ID' || oid === 'Order Id') return; 
                         
-                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].trim() : "";
-                        let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].trim() : "";
-                        let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].trim() : "";
+                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].replace(/^"|"$/g, '').trim() : "";
+                        let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].replace(/^"|"$/g, '').trim() : "";
+                        let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].replace(/^"|"$/g, '').trim() : "";
 
                         if (!oid && !tid) return; 
 
@@ -1192,15 +1216,15 @@
 
                         validRecords.push({
                             uid: uniqueId,  
-                            orderDate: standardizeToYYYYMMDD(map.oDate !== -1 && c[map.oDate] ? c[map.oDate] : ""),
+                            orderDate: standardizeToYYYYMMDD(map.oDate !== -1 && c[map.oDate] ? c[map.oDate].replace(/^"|"$/g, '') : ""),
                             orderId: oid || `UNKNOWN-OID-${Date.now()}-${idx}`,
-                            reqDate: standardizeToYYYYMMDD(map.reqDate !== -1 && c[map.reqDate] ? c[map.reqDate] : ""),
+                            reqDate: standardizeToYYYYMMDD(map.reqDate !== -1 && c[map.reqDate] ? c[map.reqDate].replace(/^"|"$/g, '') : ""),
                             trackingId: tid,
                             sku: sku,
                             asin: asin,
-                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason] : "",
+                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason].replace(/^"|"$/g, '') : "",
                             oAmt: amt,
-                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty] : "1",
+                            oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty].replace(/^"|"$/g, '') : "1",
                             status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
                             claimId: '', claimDate: '', amtRec: '', delDate: ''
                         });
@@ -1275,7 +1299,6 @@
             if (reportData.length === 0) return alert("Please wait for all-time data to load first.");
             if (!podDate) return alert("Select Delivery Date.");
 
-            let matchCount = 0;
             let overwrittenCount = 0;
             let skippedCount = 0;
             let itemsToSave = new Set(); 
@@ -1306,39 +1329,46 @@
                                 let rowTid = cols[tidIdx] ? cols[tidIdx].replace(/^"|"$/g, '').trim() : "";
                                 let rowTitle = (titleIdx !== -1 && cols[titleIdx]) ? cols[titleIdx].replace(/^"|"$/g, '').trim() : "";
                                 
-                                if (rowOid && rowTid) {
-                                    let matches = reportData.filter(d => d.orderId === rowOid);
+                                let itemToUpdate = null;
+
+                                // PRIORITY 1: Match by exact Tracking ID FIRST 
+                                // AND ensure it hasn't been fully received yet.
+                                if (rowTid) {
+                                    itemToUpdate = reportData.find(d => d.trackingId === rowTid && d.status !== 'Received' && d.status !== 'Lost');
+                                }
+
+                                // PRIORITY 2: If no exact tracking match, search by Order ID
+                                if (!itemToUpdate && rowOid) {
+                                    // ONLY look at items for this Order ID that have NOT been received yet
+                                    let availableMatches = reportData.filter(d => d.orderId === rowOid && d.status !== 'Received' && d.status !== 'Lost');
                                     
-                                    if (matches.length > 0) {
-                                        let itemToUpdate = matches.find(d => 
+                                    if (availableMatches.length > 0) {
+                                        let asinMatches = availableMatches.filter(d => 
                                             (d.asin && rowTitle.includes(d.asin)) || 
-                                            (d.sku && rowTitle.includes(d.sku))
+                                            (d.sku && rowTitle.includes(d.sku)) ||
+                                            availableMatches.length === 1 
                                         );
                                         
-                                        if (!itemToUpdate && matches.length === 1) {
-                                            itemToUpdate = matches[0];
-                                        }
-
-                                        if (itemToUpdate) {
-                                            
-                                            let inSafetyClaims = itemToUpdate.conditionLog && itemToUpdate.conditionLog.trim() !== '' && itemToUpdate.conditionLog !== 'Return Cancelled';
-                                            if (inSafetyClaims && itemToUpdate.status === 'Received') {
-                                                skippedCount++;
-                                                continue; 
-                                            }
-
-                                            if (itemToUpdate.trackingId !== rowTid) {
-                                                itemToUpdate.trackingId = rowTid;
-                                                overwrittenCount++;
-                                            }
-                                            
-                                            itemToUpdate.delDate = podDate;
-                                            if (itemToUpdate.status === 'In Transit') {
-                                                itemToUpdate.status = 'Pending Scan';
-                                            }
-                                            itemsToSave.add(itemToUpdate);
+                                        if (asinMatches.length > 0) {
+                                            itemToUpdate = asinMatches[0];
                                         }
                                     }
+                                }
+
+                                // PROCESS THE MATCH
+                                if (itemToUpdate) {
+                                    // OVERWRITE RULE: We ALWAYS overwrite with the POD tracking ID!
+                                    if (rowTid && itemToUpdate.trackingId !== rowTid) {
+                                        itemToUpdate.trackingId = rowTid;
+                                        overwrittenCount++;
+                                    }
+                                    
+                                    itemToUpdate.delDate = podDate;
+                                    itemToUpdate.status = 'Pending Scan';
+                                    
+                                    itemsToSave.add(itemToUpdate);
+                                } else {
+                                    skippedCount++;
                                 }
                             }
                         } else {
@@ -1348,31 +1378,39 @@
                 }
             }
 
+            // TEXT PASTE LOGIC
             if (podText.trim()) {
+                let matchedUids = new Set();
+                
                 reportData.forEach(item => {
-                    if(!item.trackingId || item.trackingId.trim() === '') return; 
-                    
-                    let inSafetyClaims = item.conditionLog && item.conditionLog.trim() !== '' && item.conditionLog !== 'Return Cancelled';
-                    if (inSafetyClaims && item.status === 'Received') {
-                        if (podText.includes(item.trackingId) || podText.includes(item.orderId)) {
+                    if(item.trackingId && item.trackingId.trim() !== '' && podText.includes(item.trackingId)) {
+                        if (item.status === 'Received' || item.status === 'Lost') {
                             skippedCount++;
-                        }
-                        return; 
-                    }
-
-                    if(podText.includes(item.trackingId) || podText.includes(item.orderId)) {
-                        item.delDate = podDate; 
-                        if(item.status === 'In Transit') {
+                        } else {
+                            item.delDate = podDate; 
                             item.status = 'Pending Scan'; 
+                            itemsToSave.add(item);
+                            matchedUids.add(item.uid);
                         }
-                        itemsToSave.add(item);
+                    }
+                });
+
+                reportData.forEach(item => {
+                    if(!matchedUids.has(item.uid) && item.orderId && podText.includes(item.orderId)) {
+                        if (item.status === 'Received' || item.status === 'Lost') {
+                            skippedCount++;
+                        } else {
+                            item.delDate = podDate; 
+                            item.status = 'Pending Scan'; 
+                            itemsToSave.add(item);
+                        }
                     }
                 });
             }
             
             if(itemsToSave.size === 0) {
-                let msg = "No valid IDs matched the report, or matched IDs had blank Tracking Numbers.";
-                if (skippedCount > 0) msg += `\n\n(Skipped ${skippedCount} items because they were already received and processed in Safety Claims.)`;
+                let msg = "No valid IDs matched the report.";
+                if (skippedCount > 0) msg += `\n\n(Skipped ${skippedCount} items because they were already completely Received and Processed.)`;
                 alert(msg);
             } else {
                 const batch = db.batch();
@@ -1389,9 +1427,9 @@
                 renderScanTable();
                 updateStats();
                 
-                let msg = `Matched ${itemsToSave.size} expected deliveries. The table below now shows ALL pending scans.`;
-                if (overwrittenCount > 0) msg += `\n✅ (Overwrote ${overwrittenCount} tracking IDs from the POD file)`;
-                if (skippedCount > 0) msg += `\n⏭️ (Skipped ${skippedCount} items already processed in Safety Claims)`;
+                let msg = `Matched ${itemsToSave.size} expected deliveries. The table below now shows ALL pending scans for ${fmtDate(podDate)}.`;
+                if (overwrittenCount > 0) msg += `\n✅ (Replaced ${overwrittenCount} Amazon tracking IDs with actual POD tracking IDs)`;
+                if (skippedCount > 0) msg += `\n⏭️ (Skipped ${skippedCount} items that were already completely Received)`;
                 alert(msg);
                 
                 document.getElementById('scanInput').focus();
@@ -1401,15 +1439,19 @@
         function renderScanTable() {
             const selectedPodDate = document.getElementById('podDate').value;
             
+            // STRICT FIX: If no date is selected in Step A, show nothing in the table.
+            if (!selectedPodDate) {
+                document.getElementById('scanTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align:center; padding: 40px; color: #666; font-size: 14px;">
+                            👆 <b>Please select a Delivery Date and Lock in your POD to view items.</b>
+                        </td>
+                    </tr>`;
+                return;
+            }
+            
             const pendingScans = reportData.filter(d => {
-                if (d.status !== 'Pending Scan') return false;
-                
-                // If a date is selected, ONLY show items from that exact delivery date
-                if (selectedPodDate) {
-                    return d.delDate === selectedPodDate;
-                }
-                
-                return true; 
+                return d.status === 'Pending Scan' && d.delDate === selectedPodDate;
             });
 
             pendingScans.sort((a,b) => new Date(b.delDate || 0) - new Date(a.delDate || 0));
@@ -1447,6 +1489,8 @@
             
             for (let i = 0; i < tr.length; i++) {
                 const row = tr[i];
+                if(row.children.length === 1) continue; // Skip the "Please select date" placeholder
+                
                 const uid = row.id.replace('row-', '');
                 const d = reportData.find(item => item.uid === uid);
                 if (!d) continue;
@@ -1475,9 +1519,15 @@
             const feedback = document.getElementById('scanFeedback');
             const podDate = document.getElementById('podDate').value;
 
-            let item = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'Pending Scan');
+            // Only allow scanning items that MATCH the currently selected POD date
+            let item = reportData.find(d => 
+                (d.trackingId === val || d.orderId === val) && 
+                d.status === 'Pending Scan' &&
+                d.delDate === podDate
+            );
             
             if (!item) {
+                // Check if they scanned something In Transit but forgot to POD it
                 let transitItem = reportData.find(d => (d.trackingId === val || d.orderId === val) && d.status === 'In Transit');
                 if (transitItem) {
                     if (!podDate) {
@@ -1517,7 +1567,7 @@
                 }
             } else { 
                 input.classList.add('highlight-red'); 
-                feedback.innerText = `Not Found or Already Scanned: ${val}`;
+                feedback.innerText = `Not Found in Today's Batch or Already Scanned: ${val}`;
                 feedback.style.color = "red";
                 input.value = ''; 
             }
@@ -1674,7 +1724,7 @@
             
             document.querySelectorAll('td[data-val] input[id^="amt-"]').forEach(el => calcSafety(el));
             filterSafety();
-            populateMsgOrderIds(); // Update message dropdown if conditions match
+            populateMsgOrderIds(); 
         }
 
         function toggleSafetySave(uid, cond) {
@@ -1752,7 +1802,6 @@
                 const dynCDate = document.getElementById(`cdate-${uid}`);
                 let vClaim = claimType === 'claimId' ? (dynCid ? dynCid.value : (d.claimId||"")) : (dynCDate ? dynCDate.value : (d.claimDate||""));
                 
-                // If it's a date being searched, check formatted value too
                 if (claimType === 'claimDate') vClaim = fmtDate(vClaim);
                 
                 vClaim = vClaim.toString().toUpperCase();
@@ -1846,7 +1895,6 @@
             document.getElementById('msgSelectedUid').value = uid;
             document.getElementById('msgOrderSearch').value = displayText;
             document.getElementById('msgOrderOptions').classList.remove('show');
-            // Deliberately NOT calling generateMessage() here as requested.
         }
 
         function populateMsgOrderIds() {
@@ -1879,9 +1927,8 @@
             let others = [];
 
             if (cond === 'Lost') {
-                // If "Lost", only show "In Transit" items from the master file. (Strict request)
                 matches = reportData.filter(d => d.status === 'In Transit');
-                others = []; // Don't show regular safety claims if "Lost" condition selected.
+                others = []; 
             } else {
                 matches = pendingClaims.filter(d => d.conditionLog === cond);
                 let matchUids = matches.map(m => m.uid);
@@ -1971,7 +2018,7 @@
             const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = 'Claim_Templates.doc'; // Preserving .doc extension so it opens in Word
+            link.download = 'Claim_Templates.doc'; 
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -1999,7 +2046,6 @@
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     let text = e.target.result;
-                    // Detect if it is actually binary jargon instead of fake-HTML doc
                     if (text.indexOf('\x00') !== -1) {
                         alert("⚠️ Binary format detected!\n\nYou saved this as an older '.doc' format. To use it in this system, please open your file in Microsoft Word, click 'Save As', and choose either '.docx' (Word Document) or '.txt' (Plain Text) format before uploading.");
                         return;
@@ -2177,7 +2223,6 @@
                     const lines = e.target.result.split('\n');
                     
                     let hIdx = -1;
-                    // Look for the "date/time" header explicitly
                     for(let i=0; i<Math.min(30, lines.length); i++) {
                         const lowerLine = lines[i].toLowerCase().trim();
                         if(lowerLine.startsWith('"date/time"') || lowerLine.startsWith('date/time')) {
@@ -2266,7 +2311,7 @@
                     });
 
                     if (chunks.length > 0) {
-                        const chunkSize = 400; // Safe batch limit
+                        const chunkSize = 400; 
                         for(let i = 0; i < chunks.length; i += chunkSize) {
                             const batch = db.batch();
                             const slice = chunks.slice(i, i + chunkSize);
@@ -2755,7 +2800,6 @@
                                     let v = safeGet(idx);
                                     
                                     if (isDate && v) {
-                                        // Standardize incoming dates to yyyy-mm-dd
                                         v = standardizeToYYYYMMDD(v);
                                     }
                                     
