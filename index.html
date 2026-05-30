@@ -179,7 +179,7 @@
                     <div style="display:flex; gap: 20px; align-items: flex-start;">
                         <div>
                             <label style="font-size:12px; font-weight:bold; color:#d93025;">Delivery Date (Required):</label><br>
-                            <input type="date" id="podDate" style="margin-top:5px; border: 2px solid #d93025; border-radius:4px; padding: 4px;">
+                            <input type="date" id="podDate" style="margin-top:5px; border: 2px solid #d93025; border-radius:4px; padding: 4px;" onchange="renderScanTable()">
                         </div>
                         <div>
                             <label style="font-size:12px; font-weight:bold;">POD File (Optional):</label><br>
@@ -1399,7 +1399,19 @@
         }
 
         function renderScanTable() {
-            const pendingScans = reportData.filter(d => d.status === 'Pending Scan');
+            const selectedPodDate = document.getElementById('podDate').value;
+            
+            const pendingScans = reportData.filter(d => {
+                if (d.status !== 'Pending Scan') return false;
+                
+                // If a date is selected, ONLY show items from that exact delivery date
+                if (selectedPodDate) {
+                    return d.delDate === selectedPodDate;
+                }
+                
+                return true; 
+            });
+
             pendingScans.sort((a,b) => new Date(b.delDate || 0) - new Date(a.delDate || 0));
 
             document.getElementById('scanTableBody').innerHTML = pendingScans.map(d => `
@@ -2104,9 +2116,15 @@
                 return;
             }
 
-            const actionOpts = `<option value="">-Select Action-</option>` + customAgingActions.map(act => `<option value="${act}">${act}</option>`).join('');
-
             body.innerHTML = agingGroups.map(group => {
+                
+                // Dynamically ensure the group's saved cloud action is in the dropdown list, even if created on another PC
+                let rowActions = [...customAgingActions];
+                if (group.agingAction && !rowActions.includes(group.agingAction)) {
+                    rowActions.push(group.agingAction);
+                }
+                const actionOpts = `<option value="">-Select Action-</option>` + rowActions.map(act => `<option value="${act}">${act}</option>`).join('');
+
                 const bg = group.isHighlighted ? 'background-color:#fff3cd; border: 2px solid #ffc107;' : 
                           (group.agingStatus === 'Approved' ? 'background-color:#f1f3f4; opacity:0.8;' : '');
                 
@@ -2313,7 +2331,6 @@
                 await batch.commit();
                 
                 setTimeout(() => { if(spinner) spinner.style.opacity = '0'; }, 300);
-                checkAging(); 
             } catch(e) {
                 console.error("Error saving aging:", e);
                 setCloudStatus('offline');
