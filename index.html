@@ -905,13 +905,18 @@
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
+            
+            reader.onload = async (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
                     if (Array.isArray(data)) {
                         reportData = data;
-                        saveData(); 
-                        loadData();
+                        
+                        document.getElementById('ingestionTableBody').innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 20px;"><b>Restoring ${data.length} records to the cloud... Please do not close the window...</b></td></tr>`;
+                        
+                        await saveData(); 
+                        await loadData();
+                        
                         alert("Backup restored successfully! Loaded " + data.length + " records.");
                         if(document.getElementById('master').classList.contains('active')) renderMasterTable();
                         if(document.getElementById('safety').classList.contains('active')) renderSafetyTable();
