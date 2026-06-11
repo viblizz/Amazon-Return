@@ -663,36 +663,34 @@
         // Extremely robust parser to save all incoming dates internally as YYYY-MM-DD 
         // This ensures math calculations (like 50+ days aging) work flawlessly.
         function standardizeToYYYYMMDD(dStr) {
-            if(!dStr) return "";
+            if (!dStr || dStr === '-') return "";
             let s = dStr.toString().trim();
-            if(s.includes('T')) s = s.split('T')[0];
-            if(s.includes(' ')) s = s.split(' ')[0];
+            if (s.includes('T')) s = s.split('T')[0];
+            if (s.includes(' ')) s = s.split(' ')[0];
 
+            // 1. Try native Date parsing FIRST (handles "05-Jun-2026" perfectly)
+            let d = new Date(s);
+            if (!isNaN(d.getTime())) {
+                return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            }
+
+            // 2. Fallback manual parsing for ambiguous formats
             let parts = s.split(/[-/]/);
             if (parts.length === 3) {
                 let p1 = parseInt(parts[0]);
                 let p2 = parseInt(parts[1]);
                 let p3 = parseInt(parts[2]);
 
-                if (p3 > 1000) { 
-                    // Handle DD-MM-YYYY explicitly (Because India uses this)
+                // Ensure they are actually numbers before doing math to prevent NaN
+                if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p3 > 1000) {
                     if (p1 > 12 && p2 <= 12) {
-                        return `${p3}-${String(p2).padStart(2,'0')}-${String(p1).padStart(2,'0')}`;
-                    } 
-                    // Handle MM-DD-YYYY explicitly (Because Amazon USA uses this)
-                    else if (p2 > 12 && p1 <= 12) {
-                        return `${p3}-${String(p1).padStart(2,'0')}-${String(p2).padStart(2,'0')}`;
-                    } 
-                    // If ambiguous (e.g. 05-05-2026), default to treating it as DD-MM-YYYY per your request
-                    else {
-                        return `${p3}-${String(p2).padStart(2,'0')}-${String(p1).padStart(2,'0')}`; 
+                        return `${p3}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
+                    } else if (p2 > 12 && p1 <= 12) {
+                        return `${p3}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
+                    } else {
+                        return `${p3}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
                     }
                 }
-            }
-
-            let d = new Date(s);
-            if(!isNaN(d.getTime())) {
-                return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
             }
             return s;
         }
@@ -2804,6 +2802,9 @@
                                 if (cols.length > idx) {
                                     let v = safeGet(idx);
                                     
+                                    // DESTROY the exported hyphen before it corrupts the database
+                                    if (v === '-') v = ''; 
+                                    
                                     if (isDate && v) {
                                         v = standardizeToYYYYMMDD(v);
                                     }
@@ -2824,7 +2825,8 @@
                             maybeUpdate(15, 'claimDate', true);
                             maybeUpdate(16, 'amtRec');
                             
-                            if (item.delDate && item.status === 'In Transit') {
+                            // Prevent hyphens from triggering an In Transit overwrite
+                            if (item.delDate && item.delDate !== '-' && item.status === 'In Transit') {
                                 item.status = 'Pending Scan';
                                 changed = true;
                             }
