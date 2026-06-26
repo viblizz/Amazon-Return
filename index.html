@@ -114,6 +114,7 @@
                 <input type="file" id="restoreFile" accept=".json" style="display:none;" onchange="restoreBackup(event)">
                 <button class="nav-btn" style="color: #34a853; margin-top: 5px;" onclick="exportBackup()">💾 Download Backup</button>
                 <button class="nav-btn" style="color: #fbbc04; margin-top: 5px;" onclick="document.getElementById('restoreFile').click()">📂 Restore Backup</button>
+                <button class="nav-btn" style="color: #ff9800; margin-top: 5px;" onclick="cleanUpHyphenData()">🧹 Fix Old Hyphen Data</button>
                 <button class="nav-btn" style="color: #d93025; margin-top: 5px;" onclick="clearCompanyData()">🗑️ Clear Cloud Data</button>
             </nav>
             <div style="margin-top: auto;">
@@ -645,7 +646,9 @@
         // GLOBAL DATE FORMATTER (DD-MM-YYYY)
         // ==============================================
         function fmtDate(dStr) {
-            if (!dStr || dStr === '-' || dStr === '') return '-';
+            // Return true blank instead of '-'
+            if (!dStr || dStr === '-' || dStr === '') return ''; 
+            
             let s = dStr.toString().trim();
             // If already DD-MM-YYYY
             if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
@@ -657,7 +660,7 @@
             if (!isNaN(d.getTime())) {
                 return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + d.getFullYear();
             }
-            return s; // Fallback
+            return ''; // Fallback to blank if completely unreadable
         }
 
         // Extremely robust parser to save all incoming dates internally as YYYY-MM-DD 
@@ -930,6 +933,74 @@
             reader.readAsText(file);
         }
 
+        async function cleanUpHyphenData() {
+            if(!confirm("This will scan your entire cloud database for " + currentCompany + " and safely replace all Amazon hyphens (-) with proper blank spaces. Proceed?")) return;
+            
+            setCloudStatus('syncing');
+            try {
+                // 1. Fetch all records from the cloud
+                const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
+                let fixCount = 0;
+                let chunks = [];
+                let currentBatch = [];
+
+                // 2. Identify records that have the bad hyphens
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    let needsFix = false;
+                    
+                    const checkAndFix = (field) => {
+                        if (data[field] === '-' || data[field] === '--' || data[field] === '---') {
+                            data[field] = "";
+                            needsFix = true;
+                        }
+                    };
+
+                    checkAndFix('trackingId');
+                    checkAndFix('sku');
+                    checkAndFix('asin');
+                    checkAndFix('amzReason');
+                    checkAndFix('delDate');
+                    checkAndFix('reqDate');
+                    checkAndFix('orderDate');
+
+                    if (needsFix) {
+                        currentBatch.push({ ref: doc.ref, data: data });
+                        fixCount++;
+                        
+                        // Firebase limits batches to 500 operations
+                        if (currentBatch.length === 400) {
+                            chunks.push(currentBatch);
+                            currentBatch = [];
+                        }
+                    }
+                });
+                
+                if (currentBatch.length > 0) chunks.push(currentBatch);
+
+                // 3. Save the corrected data back to Firebase
+                if (fixCount > 0) {
+                    for (let i = 0; i < chunks.length; i++) {
+                        const batch = db.batch();
+                        chunks[i].forEach(item => {
+                            batch.update(item.ref, item.data);
+                        });
+                        await batch.commit();
+                    }
+                    
+                    alert(`✅ Successfully found and cleaned ${fixCount} corrupted records in the cloud!`);
+                    await loadData(); // Reload the UI with the clean data
+                } else {
+                    alert("👍 No hyphens found! Your database is already completely clean.");
+                    setCloudStatus('online');
+                }
+            } catch (e) {
+                console.error("Error cleaning data:", e);
+                alert("Error cleaning the database. Check your internet connection.");
+                setCloudStatus('offline');
+            }
+        }
+
         async function clearCompanyData() {
             if(confirm("Are you sure you want to clear all ALL-TIME saved data for " + currentCompany + " from the cloud?\n\n(An automatic backup will download to your computer first.)")) {
                 if (reportData.length > 0) exportBackup(); 
@@ -1194,18 +1265,26 @@
                     let validRecords = [];
                     let occurrenceTracker = {}; 
 
+                    // HELPER: Strips quotes and completely removes Amazon's hyphens from blank cells
+                    const cleanAmzVal = (val) => {
+                        if (!val) return "";
+                        let clean = val.replace(/^"|"$/g, '').trim();
+                        if (clean === '-' || clean === '--') return "";
+                        return clean;
+                    };
+
                     rows.slice(1).forEach((r, idx) => {
                         if (!r.trim()) return; 
 
                         const c = parseCSVLine(r, sep);
                         if (c.length < 3) return;
 
-                        let oid = (map.oid !== -1 && c[map.oid]) ? c[map.oid].replace(/^"|"$/g, '').trim() : "";
+                        let oid = (map.oid !== -1 && c[map.oid]) ? cleanAmzVal(c[map.oid]) : "";
                         if (oid === 'Order ID' || oid === 'Order Id') return; 
                         
-                        let tid = (map.tid !== -1 && c[map.tid]) ? c[map.tid].replace(/^"|"$/g, '').trim() : "";
-                        let sku = (map.sku !== -1 && c[map.sku]) ? c[map.sku].replace(/^"|"$/g, '').trim() : "";
-                        let asin = (map.asin !== -1 && c[map.asin]) ? c[map.asin].replace(/^"|"$/g, '').trim() : "";
+                        let tid = (map.tid !== -1 && c[map.tid]) ? cleanAmzVal(c[map.tid]) : "";
+                        let sku = (map.sku !== -1 && c[map.sku]) ? cleanAmzVal(c[map.sku]) : "";
+                        let asin = (map.asin !== -1 && c[map.asin]) ? cleanAmzVal(c[map.asin]) : "";
 
                         if (!oid && !tid) return; 
 
@@ -1225,7 +1304,7 @@
                             trackingId: tid,
                             sku: sku,
                             asin: asin,
-                            amzReason: (map.reason !== -1 && c[map.reason]) ? c[map.reason].replace(/^"|"$/g, '') : "",
+                            amzReason: (map.reason !== -1 && c[map.reason]) ? cleanAmzVal(c[map.reason]) : "",
                             oAmt: amt,
                             oQty: (map.oQty !== -1 && c[map.oQty]) ? c[map.oQty].replace(/^"|"$/g, '') : "1",
                             status: 'In Transit', conditionLog: '', claimStatus: 'None', recQty: '',
@@ -1664,7 +1743,7 @@
 
                 if (d.claimStatus === 'Approved' && !isEditing) {
                     contentHtml = `
-                        <td><b>${d.claimId || '-'}</b><br>${fmtDate(d.claimDate)}</td>
+                        <td><b>${d.claimId || ''}</b><br>${fmtDate(d.claimDate)}</td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             Amt Rec: <b>${d.amtRec || '0'}</b><br>Qty Rec: <b>${d.recQty || '0'}</b>
@@ -1676,7 +1755,7 @@
                     `;
                 } else if (d.claimStatus === 'Denied' && !isEditing) {
                     contentHtml = `
-                        <td><b>${d.claimId || '-'}</b><br>${fmtDate(d.claimDate)}</td>
+                        <td><b>${d.claimId || ''}</b><br>${fmtDate(d.claimDate)}</td>
                         <td data-val="${d.oAmt}">
                             <div style="font-size:11px; margin-bottom:4px; color:#555;">Val: <b>${d.oAmt}</b> | Exp Qty: <b>${d.oQty}</b></div>
                             Amt Rec: <b>${d.amtRec || '0'}</b><br>Qty Rec: <b>${d.recQty || '0'}</b>
@@ -1719,7 +1798,7 @@
 
                 return `<tr id="safety-row-${d.uid}" style="${rowColor}">
                     <td>${fmtDate(d.delDate)}</td>
-                    <td style="font-size:12px;"><b>SKU: ${d.sku || '-'}</b><br><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
+                    <td style="font-size:12px;"><b>SKU: ${d.sku || ''}</b><br><b>${d.orderId}</b><br>${d.trackingId}<br>ASIN: ${d.asin}</td>
                     <td style="font-weight:bold;">${d.conditionLog}</td>
                     ${contentHtml}
                 </tr>`;
@@ -2511,7 +2590,7 @@
             let dupHtml = isMultiple ? `background-color:#fff3cd; border-left:4px solid #ffc107;` : ``;
             let dupWarn = isMultiple ? `<br><span style="color:#d39e00; font-size:10px; font-weight:bold;">⚠️ MULTIPLE TRACKINGS</span>` : ``;
 
-            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId} <br><b>ASIN:</b> ${d.asin}<br><b>SKU:</b> ${d.sku}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
+            let trackAsinHtml = items.map(d => `<div style="padding:4px 0;"><b>Trk:</b> ${d.trackingId || ''} <br><b>ASIN:</b> ${d.asin || ''}<br><b>SKU:</b> ${d.sku || ''}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let datesHtml = items.map(d => `<div style="padding:4px 0;">Ord: ${fmtDate(d.orderDate)}<br>Req: ${fmtDate(d.reqDate)}<br>Del: ${fmtDate(d.delDate)}<br>Claim: ${isEditing ? `<input type="text" id="em-cid-${d.uid}" value="${d.claimId}" style="width:70px; margin-bottom:2px;"><br><input type="date" id="em-cdate-${d.uid}" value="${d.claimDate}" style="width:100px;">` : fmtDate(d.claimDate)}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             let valQtyHtml = items.map(d => `<div style="padding:4px 0;">Val: <b>${d.oAmt}</b><br>Exp Qty: ${d.oQty}</div>`).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             
@@ -2532,7 +2611,7 @@
                         </select>
                     </div>`;
                 } else {
-                    return `<div style="padding:4px 0;"><span style="font-weight:bold;">${d.status}</span><br>${d.conditionLog||'-'}</div>`;
+                    return `<div style="padding:4px 0;"><span style="font-weight:bold;">${d.status}</span><br>${d.conditionLog || ''}</div>`;
                 }
             }).join('<hr style="margin:0; border-top:1px solid #ccc;">');
 
@@ -2540,7 +2619,7 @@
                 if(isEditing) {
                     return `<div style="padding:4px 0;">Qty: <input type="number" id="em-qty-${d.uid}" value="${d.recQty}" style="width:40px;"><br>Amt: <input type="number" id="em-amt-${d.uid}" value="${d.amtRec}" style="width:40px; margin-top:2px;"></div>`;
                 } else {
-                    return `<div style="padding:4px 0;">Qty: ${d.recQty||'0'}<br>Amt: ${d.amtRec||'-'}</div>`;
+                    return `<div style="padding:4px 0;">Qty: ${d.recQty||'0'}<br>Amt: ${d.amtRec||''}</div>`;
                 }
             }).join('<hr style="margin:0; border-top:1px solid #ccc;">');
             
