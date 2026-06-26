@@ -114,7 +114,6 @@
                 <input type="file" id="restoreFile" accept=".json" style="display:none;" onchange="restoreBackup(event)">
                 <button class="nav-btn" style="color: #34a853; margin-top: 5px;" onclick="exportBackup()">💾 Download Backup</button>
                 <button class="nav-btn" style="color: #fbbc04; margin-top: 5px;" onclick="document.getElementById('restoreFile').click()">📂 Restore Backup</button>
-                <button class="nav-btn" style="color: #ff9800; margin-top: 5px;" onclick="cleanUpHyphenData()">🧹 Fix Old Hyphen Data</button>
                 <button class="nav-btn" style="color: #d93025; margin-top: 5px;" onclick="clearCompanyData()">🗑️ Clear Cloud Data</button>
             </nav>
             <div style="margin-top: auto;">
@@ -931,74 +930,6 @@
                 event.target.value = ''; 
             };
             reader.readAsText(file);
-        }
-
-        async function cleanUpHyphenData() {
-            if(!confirm("This will scan your entire cloud database for " + currentCompany + " and safely replace all Amazon hyphens (-) with proper blank spaces. Proceed?")) return;
-            
-            setCloudStatus('syncing');
-            try {
-                // 1. Fetch all records from the cloud
-                const snapshot = await db.collection('workspaces').doc(currentCompany).collection('returns').get();
-                let fixCount = 0;
-                let chunks = [];
-                let currentBatch = [];
-
-                // 2. Identify records that have the bad hyphens
-                snapshot.forEach(doc => {
-                    let data = doc.data();
-                    let needsFix = false;
-                    
-                    const checkAndFix = (field) => {
-                        if (data[field] === '-' || data[field] === '--' || data[field] === '---') {
-                            data[field] = "";
-                            needsFix = true;
-                        }
-                    };
-
-                    checkAndFix('trackingId');
-                    checkAndFix('sku');
-                    checkAndFix('asin');
-                    checkAndFix('amzReason');
-                    checkAndFix('delDate');
-                    checkAndFix('reqDate');
-                    checkAndFix('orderDate');
-
-                    if (needsFix) {
-                        currentBatch.push({ ref: doc.ref, data: data });
-                        fixCount++;
-                        
-                        // Firebase limits batches to 500 operations
-                        if (currentBatch.length === 400) {
-                            chunks.push(currentBatch);
-                            currentBatch = [];
-                        }
-                    }
-                });
-                
-                if (currentBatch.length > 0) chunks.push(currentBatch);
-
-                // 3. Save the corrected data back to Firebase
-                if (fixCount > 0) {
-                    for (let i = 0; i < chunks.length; i++) {
-                        const batch = db.batch();
-                        chunks[i].forEach(item => {
-                            batch.update(item.ref, item.data);
-                        });
-                        await batch.commit();
-                    }
-                    
-                    alert(`✅ Successfully found and cleaned ${fixCount} corrupted records in the cloud!`);
-                    await loadData(); // Reload the UI with the clean data
-                } else {
-                    alert("👍 No hyphens found! Your database is already completely clean.");
-                    setCloudStatus('online');
-                }
-            } catch (e) {
-                console.error("Error cleaning data:", e);
-                alert("Error cleaning the database. Check your internet connection.");
-                setCloudStatus('offline');
-            }
         }
 
         async function clearCompanyData() {
